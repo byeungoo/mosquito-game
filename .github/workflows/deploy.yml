@@ -26,11 +26,7 @@ jobs:
       - run: npm test
       - uses: actions/configure-pages@v5
       - name: Prepare static site
-        run: |
-          mkdir -p _site/src
-          cp index.html style.css favicon.svg _site/
-          cp src/*.js _site/src/
-          touch _site/.nojekyll
+        run: npm run build
       - uses: actions/upload-pages-artifact@v4
         with:
           path: _site
