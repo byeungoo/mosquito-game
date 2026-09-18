@@ -101,6 +101,11 @@ canvas.addEventListener('pointercancel', () => { pointer.down = false; pointer.i
 canvas.addEventListener('lostpointercapture', () => { pointer.down = false; });
 canvas.addEventListener('pointerleave', () => { pointer.inside = false; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
+// Keep a held attack from becoming a page pan on mobile browsers. Scope the
+// non-passive listener to the pond so the arsenal and dialogs still scroll.
+$('arena').addEventListener('touchmove', e => {
+  if (game.status === 'playing' && e.cancelable) e.preventDefault();
+}, { passive: false });
 function useWeapon(explicit = false, dt = 0) {
   const result = selected === 'flame' ? game.sustainFlame(dt, pointer.x, pointer.y) : game.use(selected, pointer.x, pointer.y);
   if (explicit && !result.ok) {
