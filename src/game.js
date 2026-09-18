@@ -101,8 +101,8 @@ canvas.addEventListener('pointercancel', () => { pointer.down = false; pointer.i
 canvas.addEventListener('lostpointercapture', () => { pointer.down = false; });
 canvas.addEventListener('pointerleave', () => { pointer.inside = false; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
-function useWeapon(explicit = false) {
-  const result = game.use(selected, pointer.x, pointer.y);
+function useWeapon(explicit = false, dt = 0) {
+  const result = selected === 'flame' ? game.sustainFlame(dt, pointer.x, pointer.y) : game.use(selected, pointer.x, pointer.y);
   if (explicit && !result.ok) {
     if (result.reason === 'cooldown') toast(`${WEAPONS.find(w => w.id === selected).name} · ${Math.ceil(game.cooldowns[selected])}초 후 준비돼요`);
     else if (result.reason === 'overheated') toast('잠깐! 화염 방사기를 식히고 있어요.');
@@ -501,7 +501,7 @@ function frame(now) {
   if (game.status !== 'paused') visualTime += dt;
   if (game.status === 'playing') {
     game.update(dt);
-    if (pointer.down && ['net', 'flame'].includes(selected)) useWeapon();
+    if (pointer.down && ['net', 'flame'].includes(selected)) useWeapon(false, dt);
     processEvents();
     if(game.status === 'playing') sound.update(game.level, game.danger);
     hudTick += dt; if (hudTick > .075 || game.status !== 'playing') { updateHUD(); hudTick = 0; }
