@@ -1,4 +1,5 @@
 import { speciesForSpawn } from './monsters.js';
+import { UPGRADES, offerUpgrades } from './upgrades.js';
 export const WORLD = { width: 1000, height: 700 };
 export const THREAT_LIMIT = 30;
 export const WAVE_SECONDS = 22;
@@ -77,6 +78,8 @@ export class PondGame {
     this.danger = 0; this.enemies = []; this.allies = []; this.fields = []; this.events = [];
     this.cooldowns = Object.fromEntries(WEAPONS.map(w => [w.id, 0]));
     this.spawnTimer = .7; this.nextId = 1; this.heat = 0; this.overheated = false; this.flameUntil = 0;
+    this.upgrades = {}; this.upgradeOffer = []; this.upgradeWave = 0; this.wardSpent = false;
+    this.streak = 0; this.bestStreak = 0; this.streakUntil = 0; this.streakRewards = 0; this.bossWarningWave = 0;
     for (let i = 0; i < 22; i++) this.spawn(this.random() * 15);
   }
   start() { this.reset(); this.status = 'playing'; }
@@ -84,6 +87,15 @@ export class PondGame {
   get threat() { return this.enemies.reduce((n, e) => n + (stageOf(e) === 'adult' ? evolutionOf(e).threat : 0), 0); }
   get waveProgress() { return (this.elapsed % WAVE_SECONDS) / WAVE_SECONDS; }
   isUnlocked(id) { return WEAPONS.some(w => w.id === id && this.level >= w.unlock); }
+  get cooldownRate() { return 1 + (this.upgrades.tempo || 0) * .12; }
+  weaponRadius(id) { const w=WEAPONS.find(w=>w.id===id); return w.radius + (id==='net' ? (this.upgrades.netcraft || 0)*8 : 0); }
+  chooseUpgrade(id) {
+    if (!['playing','paused'].includes(this.status) || !this.upgradeOffer.includes(id)) return false;
+    const spec=UPGRADES.find(p=>p.id===id);
+    if (!spec || (this.upgrades[id] || 0)>=spec.max) return false;
+    this.upgrades[id]=(this.upgrades[id] || 0)+1;
+    this.upgradeOffer=[]; this.emit('upgraded',{id,rank:this.upgrades[id]}); return true;
+  }
   spawn(age = 0, rank = Math.min(3, Math.floor((this.level - 1) / 3.5))) {
     if (this.enemies.length >= 240) return null;
     const angle = this.random() * Math.PI * 2, radius = Math.sqrt(this.random()) * .85;
@@ -98,14 +110,24 @@ export class PondGame {
     if (!targets.length) return 0;
     const dead = [], alive = [];
     for (const e of targets) {
-      e.hp -= amount * (e.frozen > 0 ? 1.5 : 1); e.hit = .15;
-      if (e.hp <= 0) dead.push(e); else alive.push({ x: e.x, y: e.y, amount: amount * (e.frozen > 0 ? 1.5 : 1), rank: e.rank });
+      const base=amount+(source==='net'?(this.upgrades.netcraft || 0):0);
+      const hit=base*(1+(this.upgrades.power || 0)*.12)*(e.frozen>0?1.5+(this.upgrades.icecraft || 0)*.15:1)*(e.rank>=3&&stageOf(e)==='adult'?1+(this.upgrades.hunter || 0)*.25:1);
+      e.hp -= hit; e.hit = .15;
+      if (e.hp <= 0) dead.push(e); else alive.push({ x: e.x, y: e.y, amount: hit, rank: e.rank });
     }
     if (alive.length) this.emit('damage', { targets: alive, source });
     if (!dead.length) return 0;
     const ids = new Set(dead.map(e => e.id)); this.enemies = this.enemies.filter(e => !ids.has(e.id));
     this.kills += dead.length; this.bestCombo = Math.max(this.bestCombo, dead.length);
     for (const e of dead) { this.score += stageOf(e) === 'adult' ? evolutionOf(e).points : 1 + e.rank; if (e.rank === 4 && stageOf(e) === 'adult') { this.bossKills++; this.emit('bossKilled', { x: e.x, y: e.y }); } }
+    if (this.elapsed > this.streakUntil) { this.streak=0; this.streakRewards=0; }
+    this.streak+=dead.length; this.bestStreak=Math.max(this.bestStreak,this.streak); this.streakUntil=this.elapsed+4;
+    const rewards=Math.min(3,Math.floor(this.streak/12)), earned=rewards-this.streakRewards;
+    if(earned>0) {
+      this.streakRewards=rewards; this.score+=earned*15;
+      for(const id in this.cooldowns) if(!['net','flame','loach','frog'].includes(id)) this.cooldowns[id]=Math.max(0,this.cooldowns[id]-earned);
+      this.emit('streakReward',{streak:this.streak,points:earned*15,seconds:earned,x,y});
+    }
     this.emit('kills', { targets: dead.map(e => ({ x: e.x, y: e.y, adult: stageOf(e) === 'adult', frozen: e.frozen > 0, rank: e.rank })), count: dead.length, source, x, y });
     // Remove this batch before resolving chained seals so every enemy scores once.
     for (const e of dead) {
@@ -131,7 +153,7 @@ export class PondGame {
       this.cooldowns[id] = w.cooldown; this.emit('deploy', { ...point, source: id }); return { ok: true };
     }
     const center = { x, y };
-    let targets = this.enemies.filter(e => distance(e, center) <= w.radius);
+    let targets = this.enemies.filter(e => distance(e, center) <= this.weaponRadius(id));
     this.cooldowns[id] = w.cooldown;
     if (id === 'thunderstorm') {
       const strikes = this.enemies.map(e => ({ x: e.x, y: e.y }));
@@ -168,7 +190,7 @@ export class PondGame {
       this.emit(id, point); return { ok: true };
     }
     if (id === 'freeze') {
-      for (const e of targets) e.frozen = e.rank === 4 ? 2.5 : 5;
+      for (const e of targets) e.frozen = e.rank === 4 ? 2.5 : 5+(this.upgrades.icecraft || 0);
       this.fields.push({ x, y, type: 'freeze', remaining: 1.3, radius: w.radius }); this.emit('freeze', { x, y, count: targets.length }); return { ok: true };
     }
     if (id === 'meteor') {
@@ -193,16 +215,17 @@ export class PondGame {
       this.emit('lightning', { x, y, links });
     }
     const count = this.damage(targets, w.damage, id, x, y);
-    this.emit('attack', { source: id, x, y, radius: w.radius, count }); return { ok: true, count };
+    this.emit('attack', { source: id, x, y, radius: this.weaponRadius(id), count }); return { ok: true, count };
   }
   sustainFlame(delta, x, y) {
     if (this.status !== 'playing') return { ok: false, reason: 'paused' };
     const w = WEAPONS.find(w => w.id === 'flame');
     if (!this.isUnlocked('flame')) return { ok: false, reason: 'locked', unlock: w.unlock };
     if (this.overheated) return { ok: false, reason: 'overheated' };
-    const dt = Math.min(Math.max(0, delta), .1, (100 - this.heat) / w.heatPerSecond);
+    const heatRate=w.heatPerSecond*(1-(this.upgrades.fuel || 0)*.15);
+    const dt = Math.min(Math.max(0, delta), .1, (100 - this.heat) / heatRate);
     if (!dt) return { ok: true, count: 0 };
-    this.heat = Math.min(100, this.heat + dt * w.heatPerSecond);
+    this.heat = Math.min(100, this.heat + dt * heatRate);
     this.flameUntil = this.elapsed + .2;
     if (this.heat >= 100) this.overheated = true;
     const targets = this.enemies.filter(e => stageOf(e) === 'adult' && distance(e, { x, y }) <= w.radius);
@@ -217,17 +240,26 @@ export class PondGame {
   update(delta) {
     if (this.status !== 'playing') return;
     const dt = Math.max(0, Math.min(delta, .1)); this.elapsed += dt;
+    if(this.elapsed>this.streakUntil){this.streak=0;this.streakRewards=0;}
     const newLevel = 1 + Math.floor((this.elapsed + 1e-6) / WAVE_SECONDS);
     if (newLevel > this.level) {
       this.level = newLevel;
       this.emit('wave', { level: this.level, unlocked: WEAPONS.filter(w => w.unlock === this.level).map(w => w.id) });
+      if((this.level-2)%3===0 && !this.upgradeOffer.length) {
+        this.upgradeOffer=offerUpgrades(this.level,this.upgrades,this.random);this.upgradeWave=this.level;
+        if(this.upgradeOffer.length)this.emit('upgradeOffer',{level:this.level});
+      }
       if (this.level >= 3) {
         const rank = Math.max(1, Math.min(3, Math.floor((this.level - 1) / 3)));
         for (let i = 0; i < Math.min(4, 1 + Math.floor((this.level - 3) / 3)); i++) this.spawn(20, rank);
       }
       if (this.level >= 8 && (this.level - 8) % 4 === 0) { const queen = this.spawn(20, 4); if (queen) { queen.hp += (this.level - 8) * 4; queen.maxHp = queen.hp; this.emit('boss', { x: queen.x, y: queen.y }); } }
     }
-    for (const id in this.cooldowns) this.cooldowns[id] = Math.max(0, this.cooldowns[id] - dt);
+    const nextBoss=8+Math.max(0,Math.ceil((this.level+1-8)/4))*4;
+    if(nextBoss===this.level+1 && (1-this.waveProgress)*WAVE_SECONDS<=6 && this.bossWarningWave!==nextBoss) {
+      this.bossWarningWave=nextBoss;this.emit('bossWarning',{level:nextBoss});
+    }
+    for (const id in this.cooldowns) this.cooldowns[id] = Math.max(0, this.cooldowns[id] - dt * (['net','flame'].includes(id)?1:this.cooldownRate));
     if (this.elapsed > this.flameUntil + 1e-6) this.heat = Math.max(0, this.heat - dt * 22);
     if (this.overheated && this.heat <= 25) this.overheated = false;
     this.spawnTimer -= dt;
@@ -299,7 +331,7 @@ export class PondGame {
     for (let i = 0; i < offspring; i++) this.spawn(5);
     const claimedPrey = new Set();
     for (const a of this.allies) {
-      a.attack -= dt;
+      a.attack -= dt * (1+(this.upgrades.pack || 0)*.2);
       const edible = this.enemies.filter(e => (a.type === 'frog') === (stageOf(e) === 'adult') && (a.type !== 'loach' || !claimedPrey.has(e.id)));
       let target = null, nearest = Infinity;
       if (a.type === 'loach') target = edible.find(e => e.id === a.targetId) || null;
@@ -321,6 +353,9 @@ export class PondGame {
     }
     separateLoaches(this.allies);
     this.danger = this.threat >= THREAT_LIMIT ? this.danger + dt : Math.max(0, this.danger - dt * 2);
-    if (this.danger >= 5) { this.status = 'lost'; this.emit('end'); }
+    if (this.danger >= 5) {
+      if(this.upgrades.ward && !this.wardSpent){this.wardSpent=true;this.danger=0;for(const e of this.enemies)e.frozen=Math.max(e.frozen,3);this.emit('ward');}
+      else {this.status = 'lost'; this.emit('end');}
+    }
   }
 }

@@ -50,6 +50,7 @@
         <div id="wave-announcement" class="wave-announcement" aria-live="polite"><span>EVOLUTION</span><strong>WAVE 02</strong><p></p></div>
         <div id="boss-hud" class="boss-hud hidden"><span>♛ 재앙의 여왕</span><div><i id="boss-health"></i></div><b id="boss-hp-text"></b></div>
         <div id="toast" class="toast" role="status" aria-live="polite"></div>
+        <div id="streak-hud" class="streak-hud hidden"><b id="streak-value">0 CHAIN</b><span>4초 안에 이어 잡기</span><div><i id="streak-bar"></i></div></div>
         <div class="arena-bottom"><span id="weapon-hint">도구를 골라 연못을 지켜주세요</span><span class="weather" id="score-label">SCORE 0000</span></div>
 
         <div class="overlay" id="start-overlay">
@@ -72,13 +73,14 @@
         <div class="arsenal-heading"><div><span class="eyebrow">EVOLVING ARSENAL</span><h2>금지된 방어 장비</h2></div><span class="weapon-count" id="unlock-count">02<span>/15</span></span></div>
         <div class="weapon-grid" id="weapon-grid" role="group" aria-label="무기 선택"></div>
         <div class="weapon-detail" id="weapon-detail"><span class="detail-tag" id="detail-tag">기본 장비 · 물속</span><h3 id="detail-name">대왕 뜰채</h3><p id="detail-description">클릭하거나 드래그해 유충을 한 번에 걷어내세요.</p><div class="detail-footer"><span id="detail-cooldown">재사용 0.35초</span><span id="detail-status">사용 준비 완료</span></div></div>
+        <section class="run-build" aria-label="이번 판 강화"><div><span class="eyebrow">MY SURVIVAL BUILD</span><button id="upgrade-open" type="button" hidden>강화 선택 ↗</button></div><p id="build-empty">W2부터 3단계마다 나만의 강화를 선택하세요.</p><div id="run-upgrades"></div></section>
         <div class="field-note"><span>MUTATION INDEX <span>↙</span></span><button id="guide-btn" class="guide-btn">괴물 도감 · 8종 ↗</button><div class="mutation-legend"><span>● 일반</span><span>● 흡혈</span><span>● 철갑</span><span>● 사신</span><span>♛ 여왕</span></div><p id="field-note">성충을 오래 놔두면 괴물이 됩니다.<br>뜰채로 성충도 잡을 수 있어요.</p></div>
       </aside>
     </section>
     <footer class="footer"><span><i></i> 연못의 평화를 위한 조금 과격한 방법</span><span>설치 없이 플레이 · PC & 모바일 <span class="footer-flower">✳</span></span></footer>
   </main>
 
-  <dialog id="help-dialog"><button id="close-help-btn" class="close-btn" aria-label="도움말 닫기">×</button><span class="eyebrow">ENDLESS SURVIVAL GUIDE</span><h2>모기를 괴물로 키우지 마세요.</h2><p>제한 시간 없는 무한 생존입니다. <b>22초마다 단계가 오르고</b> 적이 강해지며 새로운 무기가 해금됩니다. 위험도 30 이상에서 붕괴 게이지가 5초간 쌓이면 패배합니다. 적을 줄이면 게이지가 서서히 회복돼요.</p><ol><li><b>일반 → 흡혈종 → 철갑종 → 사신종 → 여왕.</b> 성충은 15초마다 진화합니다. 받은 피해 비율은 유지되며 여왕은 8단계부터 나타납니다.</li><li>위험도는 일반 1, 흡혈 2, 철갑 3, 사신 5, 여왕 10. 사신과 여왕은 새 유충도 낳습니다.</li><li><b>뜰채는 성충도 공격</b>할 수 있어요. 미꾸라지와 개구리는 각각 최대 10마리. 괴물에게는 여러 번 공격해야 합니다.</li><li>무기 버튼 또는 <b>1–9, 0, -, Q, W, E, R</b> 키로 선택. 잠긴 장비에 해금 단계가 표시됩니다.</li><li>절대 영도에 얼린 적은 피해를 <b>1.5배</b> 받습니다. 여왕의 빙결은 더 빨리 풀립니다.</li><li><b>Q 두꺼비 합창</b>은 반복 충격파, <b>W 시간 되감기</b>는 성장·진화 퇴행, <b>E 연쇄 부적</b>은 처치 시 주변으로 번지는 폭발입니다.</li><li><b>P / Esc</b>로 일시정지. 탭을 떠나면 자동 정지됩니다.</li></ol><p class="help-note">게임 속 생물·무기 효과는 재미를 위한 상상입니다. 게임 시작 시 배경음과 효과음이 재생됩니다. 상단 ♪ 버튼으로 끄거나 켤 수 있어요.</p><button id="help-ok-btn" class="primary-btn">준비됐어요 <span>✓</span></button></dialog>
+  <dialog id="help-dialog"><button id="close-help-btn" class="close-btn" aria-label="도움말 닫기">×</button><span class="eyebrow">ENDLESS SURVIVAL GUIDE</span><h2>모기를 괴물로 키우지 마세요.</h2><p>제한 시간 없는 무한 생존입니다. <b>22초마다 단계가 오르고</b> 적이 강해지며 새로운 무기가 해금됩니다. 위험도 30 이상에서 붕괴 게이지가 5초간 쌓이면 패배합니다. 적을 줄이면 게이지가 서서히 회복돼요.</p><ol><li><b>일반 → 흡혈종 → 철갑종 → 사신종 → 여왕.</b> 성충은 15초마다 진화합니다. 받은 피해 비율은 유지되며 여왕은 8단계부터 나타납니다.</li><li>위험도는 일반 1, 흡혈 2, 철갑 3, 사신 5, 여왕 10. 사신과 여왕은 새 유충도 낳습니다.</li><li><b>뜰채는 성충도 공격</b>할 수 있어요. 미꾸라지와 개구리는 각각 최대 10마리. 괴물에게는 여러 번 공격해야 합니다.</li><li>무기 버튼 또는 <b>1–9, 0, -, Q, W, E, R</b> 키로 선택. 잠긴 장비에 해금 단계가 표시됩니다.</li><li>절대 영도에 얼린 적은 피해를 <b>1.5배</b> 받습니다. 여왕의 빙결은 더 빨리 풀립니다.</li><li><b>Q 두꺼비 합창</b>은 반복 충격파, <b>W 시간 되감기</b>는 성장·진화 퇴행, <b>E 연쇄 부적</b>은 처치 시 주변으로 번지는 폭발입니다.</li><li><b>W2, W5, W8…</b>에서 세 가지 중 하나의 강화를 선택하세요. 선택 중에는 시간이 멈추며 강화는 이번 판 동안 유지됩니다.</li><li><b>4초 안에 이어 처치</b>하면 CHAIN이 쌓입니다. 12·24·36연속 처치마다 점수 +15, 공격 스킬 대기시간 1초 회복! 지원군 소환은 제외됩니다.</li><li><b>P / Esc</b>로 일시정지. 탭을 떠나면 자동 정지됩니다.</li></ol><p class="help-note">게임 속 생물·무기 효과는 재미를 위한 상상입니다. 게임 시작 시 배경음과 효과음이 재생됩니다. 상단 ♪ 버튼으로 끄거나 켤 수 있어요.</p><button id="help-ok-btn" class="primary-btn">준비됐어요 <span>✓</span></button></dialog>
   <dialog id="share-dialog" aria-labelledby="share-title">
     <button id="close-share-btn" class="close-btn" aria-label="닫기">×</button>
     <span class="eyebrow">INVITE YOUR FRIENDS</span><h2 id="share-title">함께 연못을 지켜요</h2>
@@ -93,6 +95,11 @@
     <span class="eyebrow">MUTANT FIELD GUIDE</span><h2 id="guide-title">연못의 괴물들</h2>
     <p>단계가 오르면 새로운 외형이 합류합니다. 각 종류는 일반부터 여왕까지 진화하며, 체력과 위험도는 진화 등급에 따라 결정됩니다.</p>
     <div id="monster-gallery"></div>
+  </dialog>
+  <dialog id="upgrade-dialog" aria-labelledby="upgrade-title" aria-describedby="upgrade-wave">
+    <span class="eyebrow">THE POND STRIKES BACK</span><h2 id="upgrade-title">이번에는, 당신이 진화할 차례.</h2>
+    <p id="upgrade-wave"></p><div id="upgrade-options"></div>
+    <div class="upgrade-footer"><span>선택하는 동안 연못은 안전하게 멈춥니다.</span><button id="upgrade-later" class="text-btn">나중에 선택</button></div>
   </dialog>
   <script type="module" src="./src/game.js"></script>
 </body>

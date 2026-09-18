@@ -1,4 +1,5 @@
 import { PondAudio } from './audio.js';
+import { setupProgression } from './progression-ui.js';
 import { drawDragonKing, drawThunderstorm } from './spectacle.js';
 import { SPECIES, speciesOf, drawMonster } from './monsters.js';
 import { setupSharing } from './share.js';
@@ -65,7 +66,7 @@ function startGame() {
   $('pause-btn').disabled = false; $('pause-btn').textContent = 'Ⅱ'; $('pause-btn').setAttribute('aria-label', '일시정지');
   selectWeapon('net'); $('stage-label').textContent = 'WAVE 01 · 잠복';
   toast('뜰채는 성충도 공격합니다. 진화하기 전에 잡으세요!');
-  canvas.focus({ preventScroll: true }); tone(420, .15, 'sine', .04, 840); updateHUD();
+  canvas.focus({ preventScroll: true }); tone(420, .15, 'sine', .04, 840); progression.refresh(); updateHUD();
 }
 function pauseGame() {
   if (game.status !== 'playing') return;
@@ -73,7 +74,7 @@ function pauseGame() {
   $('pause-btn').textContent = '▷'; $('pause-btn').setAttribute('aria-label', '계속하기'); $('resume-btn').focus({ preventScroll: true });
 }
 function resumeGame() {
-  if (game.status !== 'paused' || document.querySelector('dialog[open]')) return;
+  if (game.status !== 'paused' || document.hidden || document.querySelector('dialog[open]')) return;
   sound.unlock(); game.status = 'playing'; $('pause-overlay').classList.add('hidden'); $('pause-btn').textContent = 'Ⅱ'; $('pause-btn').setAttribute('aria-label', '일시정지'); canvas.focus({ preventScroll: true });
 }
 for (const id of ['start-btn', 'restart-btn', 'restart-pause-btn']) $(id).addEventListener('click', startGame);
@@ -122,7 +123,7 @@ function endGame() {
   best.score = Math.max(best.score, game.score); best.level = Math.max(best.level, game.level); best.kills = Math.max(best.kills || 0, game.kills);
   try { localStorage.setItem('pond-defense-endless-v2', JSON.stringify(best)); } catch { /* Continue without persistence. */ }
   $('result-eyebrow').textContent = 'THE POND HAS FALLEN'; $('result-title').textContent = '연못이 무너졌습니다';
-  $('result-description').textContent = `최대 ${game.bestCombo}마리 동시 퇴치 · 여왕 ${game.bossKills}마리 처치`;
+  $('result-description').textContent = `최고 ${game.bestStreak}연속 처치 · 여왕 ${game.bossKills}마리 · 강화 ${Object.values(game.upgrades).reduce((a,b)=>a+b,0)}회`;
   $('result-score').textContent = game.score.toLocaleString(); $('result-level').textContent = `W${game.level}`;
   $('result-kills').textContent = game.kills; $('result-time').textContent = formatTime(game.elapsed);
   $('result-best').textContent = `${newBest ? '✦ 새로운 최고 기록! · ' : ''}최고 ${best.score}점 / WAVE ${best.level}`;
@@ -134,6 +135,10 @@ function formatTime(time) { const sec = Math.floor(time); return `${String(Math.
 
 function updateHUD() {
   $('time-value').textContent = formatTime(game.elapsed);
+  $('streak-hud').classList.toggle('hidden',game.streak<3 || game.status==='ready' || game.status==='lost');
+  $('streak-value').textContent=`${game.streak} CHAIN`;
+  $('streak-bar').style.width=`${Math.max(0,Math.min(100,(game.streakUntil-game.elapsed)/4*100))}%`;
+  progression.refresh();
   const threat = game.threat;
   $('adult-value').textContent = threat; $('kill-value').innerHTML = `${game.kills}<small>마리</small>`;
   $('danger-bar').style.width = `${Math.min(100, threat / THREAT_LIMIT * 100)}%`;
@@ -148,7 +153,12 @@ function updateHUD() {
   $('next-unlock').textContent = next.length ? `${next.map(w=>w.name).join(' + ')} · W${nextLevel}` : '한계를 넘어 · 적 증원 계속';
   $('score-label').textContent = `SCORE ${String(game.score).padStart(4,'0')}`;
   $('unlock-count').innerHTML = `${String(WEAPONS.filter(w=>game.isUnlocked(w.id)).length).padStart(2,'0')}<span>/${WEAPONS.length}</span>`;
-  const w = WEAPONS.find(w => w.id === selected), cd = game.cooldowns[selected];
+  const w = WEAPONS.find(w => w.id === selected), cd = game.cooldowns[selected] / (['net','flame'].includes(selected)?1:game.cooldownRate);
+  if(game.isUnlocked(selected)) {
+    const power=1+(game.upgrades.power||0)*.12;
+    $('detail-tag').textContent=selected==='net'?`뜰채 피해 ${Number(((1+(game.upgrades.netcraft||0))*power).toFixed(2))} · 반경 ${game.weaponRadius('net')}`:selected==='flame'?`초당 피해 ${Number((w.dps*power).toFixed(1))} · 연속 분사 ${(4/(1-(game.upgrades.fuel||0)*.15)).toFixed(1)}초`:w.tag;
+    $('detail-cooldown').textContent=selected==='flame'?'누르는 동안 지속 피해':`재사용 ${(w.cooldown/(['net','flame'].includes(selected)?1:game.cooldownRate)).toFixed(1)}초`;
+  }
   const allyCount = ALLY_LIMITS[selected] ? game.allies.filter(a => a.type === selected).length : 0;
   $('detail-status').textContent = !game.isUnlocked(selected) ? `WAVE ${w.unlock} 해금` : ALLY_LIMITS[selected] ? `${allyCount}/${ALLY_LIMITS[selected]}마리 · ${allyCount >= ALLY_LIMITS[selected] ? '배치 완료' : cd > 0 ? `${Math.ceil(cd)}초` : '배치 가능'}` : selected === 'flame' ? `${game.overheated ? '냉각 중' : '열기'} ${Math.round(game.heat)}%` : cd > 0 ? `${cd.toFixed(1)}초 후 준비` : '사용 준비 완료';
   for (const button of weaponButtons) {
@@ -156,7 +166,7 @@ function updateHUD() {
     const locked = !game.isUnlocked(id); button.classList.toggle('locked', locked); button.setAttribute('aria-disabled', String(locked));
     const label = button.querySelector('.cooldown-label');
     if (id === 'flame') { label.textContent = game.heat > 0 ? `${Math.round(game.heat)}°` : ''; button.querySelector('.cooldown-shade').style.height = `${game.heat}%`; }
-    else { label.textContent = cooldown > .1 ? `${Math.ceil(cooldown)}s` : ''; button.querySelector('.cooldown-shade').style.height = `${cooldown / spec.cooldown * 100}%`; }
+    else { label.textContent = cooldown > .1 ? `${Math.ceil(cooldown/(id==='net'?1:game.cooldownRate))}s` : ''; button.querySelector('.cooldown-shade').style.height = `${cooldown / spec.cooldown * 100}%`; }
   }
   const boss = game.enemies.find(e => e.rank === 4 && stageOf(e) === 'adult');
   $('boss-hud').classList.toggle('hidden', !boss);
@@ -179,6 +189,10 @@ function burst(x, y, color, amount = 16, power = 60) {
 function processEvents() {
   for (const e of game.drainEvents()) {
     sound.event(e);
+    if(e.type==='upgradeOffer')progression.open();
+    if(e.type==='bossWarning'){announce('DANGER APPROACHING', '6초 뒤 여왕 출현', '절대 영도와 궁극기를 준비하세요');tone(440,.2,'triangle',.08,180);}
+    if(e.type==='streakReward'){toast(`${e.streak}연속 처치! +${e.points}점 · 스킬 ${e.seconds}초 회복`);burst(e.x,e.y,'#edeea4',20,100);tone(880,.16,'sine',.07,1320);}
+    if(e.type==='ward'){announce('ONE MORE CHANCE','연못의 가호 발동','붕괴 방어 · 모든 적 3초 빙결');flash=.2;flashColor='145,230,255';tone(550,.4,'triangle',.1,1100);}
     if(e.type === 'thunderstorm') { effects.push({...e,life:1.8,max:1.8}); shake = reducedMotion ? 0 : 12; toast(`\uCC9C\uB8B0\uB09C\uBB34! ${e.count}\uB9C8\uB9AC \uD1F4\uCE58`); }
     if (e.type === 'wave') {
       const names = e.unlocked.map(id => WEAPONS.find(w => w.id === id).name);
@@ -196,7 +210,7 @@ function processEvents() {
     if (e.type === 'bossKilled') { announce('QUEEN ELIMINATED','여왕 처치','+100점 · 한숨 돌릴 시간'); flash = .2; flashColor = '229,170,255'; burst(e.x,e.y,'#ffafd5',100,210); }
     if (e.type === 'breed') burst(e.x,e.y,'#ac87cb',9,45);
     if (e.type === 'damage') {
-      for (const target of e.targets.slice(0,10)) { burst(target.x,target.y,'#fff1c2',3,40); if (e.source !== 'flame' && target.rank > 0) floating.push({x:target.x,y:target.y-12,text:`−${target.amount}`,life:.5,color:'#f7c1a2'}); }
+      for (const target of e.targets.slice(0,e.source==='flame'?3:10)) { burst(target.x,target.y,'#fff1c2',e.source==='flame'?1:3,40); if (e.source !== 'flame' && target.rank > 0) floating.push({x:target.x,y:target.y-12,text:`−${Number(target.amount.toFixed(1))}`,life:.5,color:'#f7c1a2'}); }
     }
     if (e.type === 'kills') {
       for (const target of e.targets) burst(target.x, target.y, target.frozen ? '#b7f3ff' : target.adult ? '#f6c98b' : '#c3e48c', e.source === 'flame' ? 5 : 9, 50);
@@ -370,7 +384,7 @@ function drawFields(time) {
 }
 
 function drawNet(x, y, swing = 0, opacity = 1) {
-  const rx = Math.max(27, 56 * sx), ry = Math.max(23, 56 * sy);
+  const rx = Math.max(27, game.weaponRadius('net') * sx), ry = Math.max(23, game.weaponRadius('net') * sy);
   ctx.save(); ctx.translate(x, y - Math.sin(swing * Math.PI) * 13 * unit);
   ctx.rotate(-.4 + Math.sin(swing * Math.PI) * .12); ctx.globalAlpha *= opacity;
   // Handle and metal socket sit behind the hoop, not across its opening.
@@ -490,7 +504,7 @@ function render(time) {
   ctx.globalAlpha = 1;
   for (const f of floating) { ctx.save(); ctx.globalAlpha = Math.min(1, f.life * 2); ctx.fillStyle = f.color; ctx.font = `700 ${Math.max(12, 15 * unit)}px 'Noto Sans KR',sans-serif`; ctx.textAlign = 'center'; ctx.shadowColor = '#12382c'; ctx.shadowBlur = 5; ctx.fillText(f.text, f.x * sx, f.y * sy); ctx.restore(); }
   if (pointer.inside && game.status === 'playing') {
-    const w = WEAPONS.find(w => w.id === selected), ready = game.isUnlocked(selected) && game.cooldowns[selected] <= 0 && !(selected === 'flame' && game.overheated);
+    const w = {...WEAPONS.find(w => w.id === selected),radius:game.weaponRadius(selected)}, ready = game.isUnlocked(selected) && game.cooldowns[selected] <= 0 && !(selected === 'flame' && game.overheated);
     ctx.save(); ctx.setLineDash([5, 6]); ctx.lineWidth = 1; ellipse(ctx, pointer.x * sx, pointer.y * sy, w.radius * sx, w.radius * sy); ctx.strokeStyle = ready ? '#e6eccb80' : '#e8af8670'; ctx.stroke(); ctx.setLineDash([]);
     ellipse(ctx, pointer.x * sx, pointer.y * sy, 2, 2, ready ? '#eef4cf' : '#e8af86'); ctx.restore();
     if (selected === 'net' && !effects.some(e => e.source === 'net')) drawNet(pointer.x * sx, pointer.y * sy, 0, .8);
@@ -522,6 +536,7 @@ function frame(now) {
   }
   render(visualTime); requestAnimationFrame(frame);
 }
+const progression=setupProgression({game,pause:pauseGame,resume:resumeGame,onSelect:p=>{toast(`${p.name} 강화 완료!`);tone(660,.2,'triangle',.08,990);updateHUD();}});
 resize(); updateHUD(); requestAnimationFrame(frame);
 
 setupSharing({ pause: () => { const playing = game.status === 'playing'; if (playing) pauseGame(); return playing; }, resume: resumeGame });
