@@ -1,0 +1,9 @@
+{
+  "name": "mosquito-pond",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A dependency-free pond defense game for GitHub Pages",
+  "scripts": { "dev": "node scripts/serve.mjs", "test": "node --test", "check": "node --check src/game.js && node --check src/core.js && node --check src/share.js && node --check src/monsters.js && node --check src/audio.js && node --check src/spectacle.js" },
+  "engines": { "node": ">=18" }
+}
