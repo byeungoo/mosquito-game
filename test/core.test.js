@@ -76,7 +76,7 @@ test('vortex pulls both aquatic and airborne enemies without killing them', () =
   const g=setup(4),larva=enemy(g,650,390,10),adult=enemy(g,650,400,20);g.use('vortex',500,390);advance(g,1);
   assert.ok(Math.hypot(larva.x-500,larva.y-390)<100);assert.ok(Math.hypot(adult.x-500,adult.y-390)<140);assert.equal(g.kills,0);
 });
-test('allies deal damage to their layer; ten loaches and ten frogs are allowed', () => {
+test('allies attack nearby prey; ten loaches and ten frogs are allowed', () => {
   const g=setup(5);g.use('loach',500,390);g.use('frog',500,390);enemy(g,510,390,5);const adult=enemy(g,530,390,20,1);advance(g,1);
   assert.equal(g.kills,1);assert.equal(adult.hp,2);
   for(let i=0;i<9;i++){g.cooldowns.loach=0;assert.equal(g.use('loach',500,390).ok,true);}
