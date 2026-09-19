@@ -6,6 +6,6 @@ test('medals unlock only at their threshold and earned medals never trigger twic
  g.kills=100;g.bestStreak=24;g.level=5;
  assert.deepEqual(newAchievements(g,'endless',[]).map(a=>a.id),['hunter','chain']);
  assert.deepEqual(newAchievements(g,'daily',['hunter','chain']).map(a=>a.id),['daily']);
- g.bossKills=1;g.level=10;g.allies=Array(10).fill({});
+ g.bossKills=1;g.level=10;g.allies=Array(4).fill({});
  assert.deepEqual(newAchievements(g,'endless',['hunter','chain']).map(a=>a.id),['queen','wave','squad']);
 });

@@ -1,6 +1,8 @@
+import { lateBossOf, bossPeriod } from './bestiary.js';
 import { PondAudio } from './audio.js';
 import { drawSkillEvolution, drawEvolvedFlame, drawEvolvedBolt, drawPalmEchoes } from './skill-effects.js';
-import { SKILL_FORMS } from './upgrades.js';
+import {drawCompanionDetails,drawExpansionField,drawAllyBreath} from './expansion-art.js';
+import { SKILL_FORMS, SKILL_MAX_RANK } from './upgrades.js';
 import { bindPondPointer } from './pointer.js';
 import { dailyChallenge, seededRandom, saveDailyRecord } from './daily.js';
 import { setupAchievements } from './achievements.js';
@@ -8,7 +10,7 @@ import { setupProgression } from './progression-ui.js';
 import { drawDragonSummon, drawThunderstorm, drawBigBang, drawTimeStop } from './spectacle.js';
 import { SPECIES, speciesOf, drawMonster } from './monsters.js';
 import { setupSharing } from './share.js';
-import { PondGame, WEAPONS, stageOf, THREAT_LIMIT, EVOLUTIONS, evolutionOf, ALLY_LIMITS } from './core.js';
+import { PondGame, WEAPONS, stageOf, EVOLUTIONS, evolutionOf, ALLY_LIMITS, allyGrowth, ALLY_FORMS, ALLY_GROWTH_THRESHOLDS, bossRankForWave } from './core.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('game-canvas'), ctx = canvas.getContext('2d');
@@ -184,17 +186,18 @@ function updateHUD() {
   $('streak-bar').style.width=`${Math.max(0,Math.min(100,(game.streakUntil-game.elapsed)/4*100))}%`;
   progression.refresh();
   const threat = game.threat;
+  $('danger-limit').textContent=`/ ${game.threatLimit}`;
   $('adult-value').textContent = threat; $('kill-value').innerHTML = `${game.kills}<small>마리</small>`;
-  $('danger-bar').style.width = `${Math.min(100, threat / THREAT_LIMIT * 100)}%`;
-  $('arena').classList.toggle('danger', threat >= THREAT_LIMIT);
+  $('danger-bar').style.width = `${Math.min(100, threat / game.threatLimit * 100)}%`;
+  $('arena').classList.toggle('danger', threat >= game.threatLimit);
   $('arena').dataset.phase = String(Math.min(4, Math.floor((game.level - 1) / 2)));
-  $('danger-caption').textContent = threat >= THREAT_LIMIT ? `붕괴까지 ${Math.max(0,5 - game.danger).toFixed(1)}초! 강한 괴물부터 처치` : game.danger > 0 ? `붕괴 게이지 회복 중 · ${game.danger.toFixed(1)} / 5` : `성충 ${game.adults}마리 · 진화할수록 위험도 증가`;
+  $('danger-caption').textContent = threat >= game.threatLimit ? `붕괴까지 ${Math.max(0,5 - game.danger).toFixed(1)}초! 강한 괴물부터 처치` : game.danger > 0 ? `붕괴 게이지 회복 중 · ${game.danger.toFixed(1)} / 5` : `성충 ${game.adults}마리 · 진화할수록 위험도 증가`;
   $('stage-label').textContent = `WAVE ${String(game.level).padStart(2,'0')} · ${['잠복','흡혈의 밤','철갑의 습격','사신의 연못','재앙'][Math.min(4, Math.floor((game.level - 1) / 2))]}`;
   $('wave-next').textContent = `다음 변이 · WAVE ${String(game.level + 1).padStart(2,'0')}`;
   $('wave-progress').style.width = `${game.waveProgress * 100}%`;
   const nextLevel = Math.min(...WEAPONS.filter(w => w.unlock > game.level).map(w => w.unlock));
   const next = WEAPONS.filter(w => w.unlock === nextLevel);
-  $('next-unlock').textContent = next.length ? `${next.map(w=>w.name).join(' + ')} · W${nextLevel}` : '한계를 넘어 · 적 증원 계속';
+  $('next-unlock').textContent = next.length ? `${next.map(w=>w.name).join(' + ')} · W${nextLevel}` : `${EVOLUTIONS[bossRankForWave(8+Math.max(0,Math.ceil((game.level+1-8)/4))*4)].name} · W${8+Math.max(0,Math.ceil((game.level+1-8)/4))*4}`;
   $('score-label').textContent = `SCORE ${String(game.score).padStart(4,'0')}`;
   $('unlock-count').innerHTML = `${String(WEAPONS.filter(w=>game.isUnlocked(w.id)).length).padStart(2,'0')}<span>/${WEAPONS.length}</span>`;
   const w = WEAPONS.find(w => w.id === selected), cd = game.cooldowns[selected] / (['net','flame'].includes(selected)?1:game.cooldownRate);
@@ -206,17 +209,24 @@ function updateHUD() {
     else if(selected==='net')$('weapon-hint').textContent=`클릭 / 드래그 · 피해 ${Number(((1+(game.upgrades.netcraft||0))*power).toFixed(1))} · 성충도 공격 가능`;
     else {
       const base=w.damage??({chorus:2,talisman:8}[selected]);
-      if(base)$('detail-tag').textContent=`피해 ${Number((base*power).toFixed(1))}${['thunderstorm','bigbang'].includes(selected)?' · 전장 전체':` · 반경 ${Math.round(game.weaponRadius(selected))}`}`;
+      if(base)$('detail-tag').textContent=`피해 ${Number((base*power).toFixed(1))}${['thunderstorm','bigbang','orbital'].includes(selected)?' · 전장 전체':` · 반경 ${Math.round(game.weaponRadius(selected))}`}`;
     }
   }
   const allyCount = ALLY_LIMITS[selected] ? game.allies.filter(a => a.type === selected).length : 0;
   $('detail-status').textContent = !game.isUnlocked(selected) ? `WAVE ${w.unlock} 해금` : ALLY_LIMITS[selected] ? `${allyCount}/${ALLY_LIMITS[selected]}마리 · ${allyCount >= ALLY_LIMITS[selected] ? '배치 완료' : cd > 0 ? `${Math.ceil(cd)}초` : '배치 가능'}` : selected === 'flame' ? `${game.overheated ? '냉각 중' : '열기'} ${Math.round(game.heat)}%` : cd > 0 ? `${cd.toFixed(1)}초 후 준비` : '사용 준비 완료';
   $('quick-status').textContent = $('detail-status').textContent;
   const mastery=game.skillRank(selected);
+  const squad=game.allies.filter(a=>a.type===selected);
+  $('companion-status').hidden=!ALLY_LIMITS[selected];
+  if(ALLY_LIMITS[selected]){const veteran=squad.reduce((best,a)=>!best||a.eaten>best.eaten?a:best,null);$('companion-status').textContent=veteran?`가장 성장한 동료: ${ALLY_FORMS[selected][allyGrowth(veteran)]} · 사냥 ${veteran.eaten}회 / ${allyGrowth(veteran)===3?'최종 성장':ALLY_GROWTH_THRESHOLDS[allyGrowth(veteran)]+'회에 다음 진화'}`:'사냥 90·300·750회에 스스로 진화합니다.';}
   $('quick-name').textContent=`${w.name}${mastery?` · LV ${mastery}`:''}`;
+  if(squad.length){
+    const veteran=squad.reduce((best,a)=>a.eaten>best.eaten?a:best),growth=allyGrowth(veteran);
+    $('weapon-hint').textContent=`${ALLY_FORMS[selected][growth]} · ${growth===3?'최종 성장':`${veteran.eaten}/${ALLY_GROWTH_THRESHOLDS[growth]} 사냥 · 다음 진화`} · ${allyCount}/${ALLY_LIMITS[selected]}마리`;
+  }
   if(mastery){
       const control=['vortex','freeze','rewind','timestop'].includes(selected),damage=control?'제어 강화':`피해 +${mastery*20}%`;
-    $('detail-tag').textContent+=` · 진화 ${mastery}/3 (${damage})`;
+    $('detail-tag').textContent+=` · 진화 ${mastery}/${SKILL_MAX_RANK} (${damage})`;
   }
   $('heat-hud').classList.toggle('hidden',selected!=='flame' || !['playing','paused'].includes(game.status));
   $('heat-hud').classList.toggle('overheated',game.overheated);
@@ -233,7 +243,7 @@ function updateHUD() {
   const bosses=game.enemies.filter(e=>e.rank>=4 && stageOf(e)==='adult');
   const boss=bosses.reduce((best,e)=>!best||e.rank>best.rank?e:best,null);
   $('boss-hud').classList.toggle('hidden', !boss);
-  if (boss) { const windup=boss.rank>=5 && boss.bossTimer>=(boss.rank===5?5.8:7.8);$('boss-hud').querySelector('span').textContent=`${evolutionOf(boss).name}${windup?' · 준비!':boss.shield>0?' · 보호막':boss.rage>0?' · 폭주':''}${bosses.length>1?` 외 ${bosses.length-1}`:''}`;$('boss-health').style.background=evolutionOf(boss).color;$('boss-health').style.width = `${Math.max(0,boss.hp / boss.maxHp * 100)}%`; $('boss-hp-text').textContent = `${Math.ceil(boss.hp)} / ${boss.maxHp}`; }
+  if (boss) { const windup=boss.rank>=5 && boss.bossTimer>=bossPeriod(boss.rank)-1.2;$('boss-hud').querySelector('span').textContent=`${evolutionOf(boss).name}${windup?' · 준비!':boss.shield>0?' · 보호막':boss.rage>0?' · 폭주':''}${bosses.length>1?` 외 ${bosses.length-1}`:''}`;$('boss-health').style.background=evolutionOf(boss).color;$('boss-health').style.width = `${Math.max(0,boss.hp / boss.maxHp * 100)}%`; $('boss-hp-text').textContent = `${Math.ceil(boss.hp)} / ${boss.maxHp}`; }
   $('field-note').innerHTML = tips[Math.floor(game.elapsed / 20) % tips.length];
 }
 
@@ -262,9 +272,18 @@ function processEvents() {
     }
     if(e.type==='upgradeOffer')progression.open();
     if(e.type==='bossLoot')toast('보스 전리품! 추가 강화 +1 · 다시 뽑기 충전');
-    if(e.type==='bossWindup'){toast(e.rank===5?'티라노가 숨을 들이쉽니다! 빙결로 포효를 늦추세요':'로봇 보호막 충전 중! 전기 공격을 준비하세요');tone(260,.15,'sine',.05,520);}
+    if(e.type==='orbitalSalvo')tone(95,.16,'triangle',.025,35);
+    if(e.type==='bossPattern'){
+      effects.push({...e,life:1.3,max:1.3});burst(e.x,e.y,e.color,26,100);
+      floating.push({x:e.x,y:e.y-45,text:e.name,life:1.6,color:e.color});
+      tone(e.pattern==='heal'||e.pattern==='regenerate'?660:140,.25,'triangle',.045,400);
+    }
+    if(e.type==='allyEvolve'){toast(`동료 진화! ${e.name}`);effects.push({...e,life:1.3,max:1.3});floating.push({x:e.x,y:e.y-35,text:e.name,life:2,color:e.growth===3?'#a6efff':'#ffdb86'});burst(e.x,e.y,e.growth===3?'#a6efff':'#ffdb86',28,90);tone(440,.4,'triangle',.07,1100);}
+    if(e.type==='allyBreath')effects.push({...e,life:.5,max:.5});
+    if(e.type==='sanctuary'||e.type==='orbital'){tone(e.type==='sanctuary'?660:110,.4,'triangle',.06,e.type==='sanctuary'?990:880);burst(e.x,e.y,e.type==='sanctuary'?'#b4ffcf':'#e7b0ff',25,90);}
+    if(e.type==='bossWindup'){toast(lateBossOf(e.rank)?`${lateBossOf(e.rank).action} : ${lateBossOf(e.rank).counter}`:e.rank===5?'티라노가 숨을 들이쉽니다! 빙결로 포효를 늦추세요':'로봇 보호막 충전 중! 전기 공격을 준비하세요');tone(260,.15,'sine',.05,520);}
     if(e.type==='fever'){announce('24 CHAIN · FEVER','연못의 역습','6초간 피해 +20% · 스킬 재충전 +30%');burst(e.x,e.y,'#ffdc79',50,160);tone(440,.4,'triangle',.08,1320);}
-    if(e.type==='bossWarning'){announce('DANGER APPROACHING', `6초 뒤 ${EVOLUTIONS[e.rank??4].name}`, e.rank===6?'전기 공격으로 보호막을 깨뜨리세요':'절대 영도와 궁극기를 준비하세요');tone(440,.2,'triangle',.08,180);}
+    if(e.type==='bossWarning'){announce('DANGER APPROACHING', `6초 뒤 ${EVOLUTIONS[e.rank??4].name}`, lateBossOf(e.rank)?.counter??(e.rank===6?'전기 공격으로 보호막을 깨뜨리세요':'절대 영도와 궁극기를 준비하세요'));tone(440,.2,'triangle',.08,180);}
     if(e.type==='bossRoar' || e.type==='bossShield' || e.type==='shieldBreak'){
       effects.push({...e,life:1.1,max:1.1});burst(e.x,e.y,e.type==='bossRoar'?'#ffad61':'#91eaff',22,100);
       toast(e.type==='bossRoar'?'티라노의 포효! 주변 성충 3초 가속':e.type==='bossShield'?'로봇 보호막! 전기 공격으로 파괴하세요':'보호막 파괴! 지금 집중 공격하세요');tone(e.type==='bossRoar'?65:380,.3,'triangle',.06,e.type==='bossRoar'?110:90);
@@ -284,8 +303,8 @@ function processEvents() {
       floating.push({x:e.x,y:e.y-25,text:EVOLUTIONS[e.rank].name,life:1.25,color:EVOLUTIONS[e.rank].color});
       if (e.rank >= 3) tone(110,.15,'sawtooth',.025,65);
     }
-    if (e.type === 'boss') { const boss=EVOLUTIONS[e.rank??4];announce('CATASTROPHE DETECTED',boss.name,`체력 ${boss.hp}+ · 위험도 ${boss.threat} · ${e.rank===5?'포효와 폭주':e.rank===6?'전기 공격으로 보호막 파괴':'유충 증식'}`); flash = .32; flashColor = '255,90,130'; shake = reducedMotion ? 0 : 8; tone(65,.65,'sawtooth',.07,35); burst(e.x,e.y,boss.color,65,190); }
-    if (e.type === 'bossKilled') { const boss=EVOLUTIONS[e.rank??4];announce('BOSS ELIMINATED',`${boss.name} 처치`,`+${boss.points}점 · 한숨 돌릴 시간`); flash = .2; flashColor = '229,170,255'; burst(e.x,e.y,boss.color,100,210); }
+    if (e.type === 'boss') { const boss=EVOLUTIONS[e.rank??4];announce('CATASTROPHE DETECTED',boss.name,`체력 ${boss.hp}+ · 위험도 ${boss.threat} · ${lateBossOf(e.rank)?.action??(e.rank===5?'포효와 폭주':e.rank===6?'전기 공격으로 보호막 파괴':'유충 증식')}`); flash = .32; flashColor = '255,90,130'; shake = reducedMotion ? 0 : 8; tone(65,.65,'sawtooth',.07,35); burst(e.x,e.y,boss.color,65,190); }
+    if (e.type === 'bossKilled') { const boss=EVOLUTIONS[e.rank??4];announce('BOSS ELIMINATED',`${boss.name} 처치`,`+${boss.points}점 · ${e.rank>=7?'일반 증원 8초 휴식 · 붕괴 게이지 −2초':'한숨 돌릴 시간'}`); flash = .2; flashColor = '229,170,255'; burst(e.x,e.y,boss.color,100,210); }
     if (e.type === 'breed') burst(e.x,e.y,'#ac87cb',9,45);
     if (e.type === 'damage') {
       for (const target of e.targets.slice(0,e.source==='flame'?3:10)) { burst(target.x,target.y,'#fff1c2',e.source==='flame'?1:3,40); if (e.source !== 'flame' && target.rank > 0) floating.push({x:target.x,y:target.y-12,text:`−${Number(target.amount.toFixed(1))}`,life:.5,color:'#f7c1a2'}); }
@@ -382,7 +401,7 @@ function drawEnemy(e, time) {
   const stage = stageOf(e), x = e.x * sx, y = e.y * sy;
   const mutation = evolutionOf(e), size = stage === 'adult' ? mutation.scale : 1 + e.rank * .12;
   if(e.sealed>0){ctx.save();ctx.translate(x+13*unit,y-15*unit);ctx.rotate(.2+Math.sin(time*4+e.seed)*.12);ctx.fillStyle='#f5d788';ctx.fillRect(-4*unit,-8*unit,9*unit,19*unit);ctx.strokeStyle='#b44536';ctx.lineWidth=1.2*unit;ctx.beginPath();ctx.moveTo(0,-5*unit);ctx.lineTo(0,7*unit);ctx.moveTo(-2*unit,-2*unit);ctx.lineTo(3*unit,-2*unit);ctx.moveTo(-3*unit,3*unit);ctx.lineTo(3*unit,3*unit);ctx.stroke();ctx.restore();}
-  if(e.rank>=5){const period=e.rank===5?7:9,progress=Math.max(0,(e.bossTimer-(period-1.2))/1.2);if(progress>0){ctx.save();ctx.strokeStyle='#ffe19c';ctx.lineWidth=3*unit;ctx.beginPath();ctx.arc(x,y,32*size*unit,-Math.PI/2,-Math.PI/2+Math.PI*2*progress);ctx.stroke();ctx.restore();}}
+  if(e.rank>=5){const period=bossPeriod(e.rank),progress=Math.max(0,(e.bossTimer-(period-1.2))/1.2);if(progress>0){ctx.save();ctx.strokeStyle='#ffe19c';ctx.lineWidth=3*unit;ctx.beginPath();ctx.arc(x,y,32*size*unit,-Math.PI/2,-Math.PI/2+Math.PI*2*progress);ctx.stroke();ctx.restore();}}
   if (stage === 'adult' && (e.rank > 0 || e.hp < e.maxHp)) {
     const bar = (e.rank >= 4 ? 60 : 31) * unit, ybar = y - (18 * size + 8) * unit;
     ctx.fillStyle='#0a182bd0';ctx.fillRect(x-bar/2,ybar,bar,3*unit);ctx.fillStyle=mutation.color;ctx.fillRect(x-bar/2,ybar,bar*Math.max(0,e.hp/e.maxHp),3*unit);
@@ -390,6 +409,7 @@ function drawEnemy(e, time) {
   }
   ctx.save(); ctx.translate(x, y); ctx.rotate(e.angle); ctx.scale(unit, unit);
   ctx.scale(size,size);
+  if(e.shield>0&&e.rank<7&&e.rank!==6){ctx.strokeStyle='#b7ecff';ctx.lineWidth=1.4;ellipse(ctx,0,0,30,27);ctx.stroke();}
   if(e.hit>0){ctx.shadowColor='#fff3cb';ctx.shadowBlur=16;}
   if (stage === 'adult' && e.rank>0) {
     const aura = ctx.createRadialGradient(0,0,2,0,0,30);aura.addColorStop(0,mutation.color+'40');aura.addColorStop(1,mutation.color+'00');ellipse(ctx,0,0,31,26,aura);
@@ -420,23 +440,25 @@ function drawEnemy(e, time) {
 }
 
 function drawAlly(a, time) {
+  const maturity=allyGrowth(a);
   skillAura(a.type,a.x,a.y,32, time,.65);
-  const allyScale=unit*(1+game.skillRank(a.type)*.2);
+  const allyScale=unit*(1+Math.min(3,game.skillRank(a.type))*.16+maturity*.15);
   ctx.save(); ctx.translate(a.x * sx, a.y * sy); ctx.scale(allyScale, allyScale);
   if (a.type === 'loach') {
     ctx.rotate(a.angle); const growth = 1 + Math.min(a.eaten, 20) * .014; ctx.scale(growth, growth);
     const wiggle = Math.sin(time * 9 + a.seed) * 8;
     ctx.beginPath(); ctx.moveTo(-27, wiggle); ctx.bezierCurveTo(-12, -9, 6, 4, 17, 0); ctx.lineWidth = 12; ctx.lineCap = 'round'; ctx.strokeStyle = '#152f2855'; ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(-27, wiggle - 3); ctx.bezierCurveTo(-12, -12, 6, 1, 17, -3); ctx.lineWidth = 9; ctx.strokeStyle = ['#b49a6b','#88d9b2','#7cdcff','#edc77f'][game.skillRank('loach')]; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-27, wiggle - 3); ctx.bezierCurveTo(-12, -12, 6, 1, 17, -3); ctx.lineWidth = 9; ctx.strokeStyle = maturity?['','#a3dbb6','#ffb36b','#b3efff'][maturity]:['#b49a6b','#88d9b2','#7cdcff','#edc77f','#ffbd89','#d7ffff'][game.skillRank('loach')]; ctx.stroke();
     ctx.beginPath(); ctx.moveTo(-25, wiggle - 4); ctx.bezierCurveTo(-10, -12, 8, -1, 17, -4); ctx.lineWidth = 3; ctx.strokeStyle = '#dac193'; ctx.stroke();
     ellipse(ctx, 16, -4, 8, 5.5, '#cbb081'); ellipse(ctx, 19, -6, 1.5, 1.5, '#192d27');
     ctx.strokeStyle = '#dbc9a2'; ctx.lineWidth = 1; for (const side of [-1, 1]) { ctx.beginPath(); ctx.moveTo(22, -3); ctx.quadraticCurveTo(30, side * 8, 33, side * 3); ctx.stroke(); }
   } else {
     ctx.restore(); lily(ctx, a.x * sx, a.y * sy, 26 * unit, .7, '#719557'); ctx.save(); ctx.translate(a.x * sx, a.y * sy); ctx.scale(allyScale, allyScale); ctx.rotate(a.angle + Math.PI / 2);
-    ellipse(ctx, -10, 5, 7, 5, '#426f40', -.5); ellipse(ctx, 10, 5, 7, 5, '#426f40', .5); ellipse(ctx, 0, 0, 11, 12, ['#8aad67','#b7df71','#72deda','#c4a0ff'][game.skillRank('frog')]); ellipse(ctx, 0, 3, 7, 8, '#b8ca84');
+    ellipse(ctx, -10, 5, 7, 5, '#426f40', -.5); ellipse(ctx, 10, 5, 7, 5, '#426f40', .5); ellipse(ctx, 0, 0, 11, 12, maturity?['','#b1d697','#b89fee','#ffe6a1'][maturity]:['#8aad67','#b7df71','#72deda','#c4a0ff','#ffe5a8','#cafff2'][game.skillRank('frog')]); ellipse(ctx, 0, 3, 7, 8, '#b8ca84');
     ellipse(ctx, -7, -9, 5, 5, '#94b870'); ellipse(ctx, 7, -9, 5, 5, '#94b870'); ellipse(ctx, -7, -10, 2.3, 2.8, '#192f2a'); ellipse(ctx, 7, -10, 2.3, 2.8, '#192f2a');
   }
-  ctx.restore();
+  drawCompanionDetails(ctx,{type:a.type,growth:maturity,time:reducedMotion?0:time});ctx.restore();
+  if(maturity<3){const needed=ALLY_GROWTH_THRESHOLDS[maturity],previous=(maturity?ALLY_GROWTH_THRESHOLDS[maturity-1]:0);ctx.fillStyle='#123d2a99';ctx.fillRect(a.x*sx-14,a.y*sy+25*unit,28,3);ctx.fillStyle='#c5f6aa';ctx.fillRect(a.x*sx-14,a.y*sy+25*unit,28*(a.eaten-previous)/(needed-previous),3);}
 }
 
 function skillAura(id,x,y,radius,time,alpha=1) {
@@ -445,6 +467,7 @@ function skillAura(id,x,y,radius,time,alpha=1) {
 }
 function drawFields(time) {
   for (const f of game.fields) {
+    if(['sanctuary','orbital'].includes(f.type)){drawExpansionField(ctx,{id:f.type,x:f.x,y:f.y,radius:f.radius,sx,sy,rank:game.skillRank(f.type),time,remaining:f.remaining,reducedMotion});continue;}
     if(f.type==='bigbang'){drawBigBang(ctx,{t:1-f.remaining/1.2,width,height,rank:game.skillRank('bigbang'),charging:true,reducedMotion});continue;}
     skillAura(f.type,f.x,f.y,f.radius,time,.7);
     ctx.save(); ctx.translate(f.x * sx, f.y * sy);
@@ -494,7 +517,7 @@ function drawNet(x, y, swing = 0, opacity = 1) {
   }
   ctx.restore();
   ellipse(ctx, 0, 0, rx, ry); ctx.strokeStyle = '#234e50'; ctx.lineWidth = 7 * unit; ctx.stroke();
-  ctx.strokeStyle = ['#a9d8d1','#84ffc8','#95caff','#ffe28f'][game.skillRank('net')]; ctx.shadowColor=ctx.strokeStyle;ctx.shadowBlur=reducedMotion?0:game.skillRank('net')*6;ctx.lineWidth = (4+game.skillRank('net')*2) * unit; ctx.stroke();
+  ctx.strokeStyle = ['#a9d8d1','#84ffc8','#95caff','#ffe28f','#ffd6a0','#d4ffff'][game.skillRank('net')]; ctx.shadowColor=ctx.strokeStyle;ctx.shadowBlur=reducedMotion?0:game.skillRank('net')*6;ctx.lineWidth = (4+game.skillRank('net')*2) * unit; ctx.stroke();
   ctx.beginPath(); ctx.ellipse(0, 0, rx - unit, ry - unit, 0, Math.PI * 1.04, Math.PI * 1.86); ctx.strokeStyle = '#edfff1'; ctx.lineWidth = 1.5 * unit; ctx.stroke();
   ctx.restore();
 }
@@ -535,7 +558,15 @@ function drawEffects() {
     const skill=e.source || ({lightning:'electric',tongue:'frog',sonic:'chorus',sealBurst:'talisman'}[e.type]) || e.type;
 
     const t = 1 - e.life / e.max; ctx.save(); ctx.globalAlpha = Math.min(1, e.life * 5);
-    if(['bossRoar','bossShield','shieldBreak'].includes(e.type)){
+    if(e.type==='bossPattern'){
+      ctx.strokeStyle=e.color;ctx.lineWidth=3*unit;
+      const radius=(35+t*220)*unit;ellipse(ctx,e.x*sx,e.y*sy,radius,radius*.65);ctx.stroke();
+      for(let i=0;i<8;i++){const a=i*Math.PI/4+t;const x=e.x*sx+Math.cos(a)*radius,y=e.y*sy+Math.sin(a)*radius*.65;ctx.strokeRect(x-4*unit,y-4*unit,8*unit,8*unit);}
+    }else if(e.type==='allyEvolve'){
+      ctx.strokeStyle=e.growth===3?'#b7f4ff':'#ffe3a0';ctx.lineWidth=3*unit;
+      for(let i=0;i<3;i++){const r=(20+t*75+i*14)*unit;ellipse(ctx,e.x*sx,e.y*sy,r,r*.55);ctx.stroke();}
+    }else if(e.type==='allyBreath'){drawAllyBreath(ctx,{...e,t,sx,sy});
+    }else if(['bossRoar','bossShield','shieldBreak'].includes(e.type)){
       const r=(e.radius||130)*t;ctx.strokeStyle=e.type==='bossRoar'?'#ffad61':'#92eeff';ctx.lineWidth=3*unit;ctx.globalAlpha*=1-t;
       for(let i=0;i<3;i++){ellipse(ctx,e.x*sx,e.y*sy,r*sx*(1-i*.2),r*sy*(1-i*.2));ctx.stroke();}
     } else if(e.type==='bigbang'){
@@ -611,7 +642,7 @@ function render(time) {
     if(selected==='dragon') {
       const top=Math.max(0,pointer.y-w.radius)*sy,bottom=Math.min(700,pointer.y+w.radius)*sy;
       ctx.fillRect(0,top,width,bottom-top);ctx.strokeRect(0,top,width,bottom-top);
-    } else if(['thunderstorm','timestop','bigbang'].includes(selected)) {
+    } else if(['thunderstorm','timestop','bigbang','orbital'].includes(selected)) {
       ctx.fillRect(0,0,width,height);ctx.strokeRect(3,3,width-6,height-6);
     } else if(selected==='meteor') {
       for(let i=0;i<5;i++) {const a=i/4*Math.PI*2,r=i===0?0:85;ellipse(ctx,(pointer.x+Math.cos(a)*r)*sx,(pointer.y+Math.sin(a)*r)*sy,135*game.radiusScale('meteor')*sx,135*game.radiusScale('meteor')*sy);ctx.stroke();}
@@ -662,13 +693,21 @@ $('guide-btn').addEventListener('click', () => {
 });
 $('close-guide-btn').addEventListener('click', () => $('guide-dialog').close());
 $('guide-dialog').addEventListener('close', () => { if (guidePaused) resumeGame(); guidePaused = false; });
-for (const species of SPECIES) {
-  const card = document.createElement('article'); card.className = 'monster-card';
+$('guide-btn').textContent=`괴물 도감 · ${SPECIES.length}종 ↗`;
+for (const species of [...SPECIES].sort((a,b)=>a.wave-b.wave)) {
+  const card = document.createElement('article'); card.className = 'monster-card';card.dataset.boss=String(!!species.boss);
   const preview = document.createElement('canvas'); preview.width = 300; preview.height = 180;
   preview.setAttribute('aria-label', species.name + ' 외형'); preview.setAttribute('role', 'img');
   const brush = preview.getContext('2d'); brush.translate(145,95); brush.scale(2.6,2.6);
   drawMonster(brush, { species: species.id, rank: species.rank||2, seed: 2 }, .3);
   const name = document.createElement('h3'); name.textContent = species.name;
-  const info = document.createElement('p'); info.textContent = `W${species.wave}부터 · ${species.detail}`;
+  const info = document.createElement('p'); info.textContent = `W${species.wave}부터 · ${species.detail}${species.counter?` ${species.counter}`: ''}`;
   card.append(preview,name,info); $('monster-gallery').append(card);
 }
+$('guide-count').textContent=`총 ${SPECIES.length}종 · 일반 32종 / 보스 12종 (여왕은 일반 모기의 최종 변이)`;
+for(const button of $('guide-filters').querySelectorAll('button'))button.addEventListener('click',()=>{
+  let count=0;
+  for(const card of $('monster-gallery').children){card.hidden=button.dataset.filter!=='all'&&card.dataset.boss!==String(button.dataset.filter==='boss');if(!card.hidden)count++;}
+  for(const tab of $('guide-filters').children)tab.setAttribute('aria-pressed',String(tab===button));
+  $('guide-count').textContent=`${button.textContent} · ${count}종`;
+});

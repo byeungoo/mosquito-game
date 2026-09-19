@@ -2,12 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PondGame,WEAPONS,WAVE_SECONDS } from '../src/core.js';
 import { SKILL_UPGRADES,offerUpgrades,UPGRADES } from '../src/upgrades.js';
-function setup(level=12){const g=new PondGame(()=>.5);g.start();g.level=level;g.elapsed=(level-1)*WAVE_SECONDS;g.enemies=[];g.spawnTimer=Infinity;return g;}
+function setup(level=18){const g=new PondGame(()=>.5);g.start();g.level=level;g.elapsed=(level-1)*WAVE_SECONDS;g.enemies=[];g.spawnTimer=Infinity;return g;}
 function award(g,id){g.upgradeOffer=[`skill_${id}`];assert.equal(g.chooseUpgrade(`skill_${id}`),true);}
 function target(g,x=500,y=390){const e=g.spawn(20,4);Object.assign(e,{x,y,frozen:0});return e;}
-test('every weapon has three real upgrade ranks, a cap and per-run reset',()=>{
+test('every weapon has five real upgrade ranks, a cap and per-run reset',()=>{
  assert.deepEqual(SKILL_UPGRADES.map(p=>p.weapon).sort(),WEAPONS.map(w=>w.id).sort());
- const g=setup();for(const w of WEAPONS){for(let i=0;i<3;i++)award(g,w.id);g.upgradeOffer=[`skill_${w.id}`];assert.equal(g.chooseUpgrade(`skill_${w.id}`),false);assert.equal(g.skillRank(w.id),3);}
+ const g=setup();for(const w of WEAPONS){for(let i=0;i<5;i++)award(g,w.id);g.upgradeOffer=[`skill_${w.id}`];assert.equal(g.chooseUpgrade(`skill_${w.id}`),false);assert.equal(g.skillRank(w.id),5);}
  g.start();assert.equal(g.skillRank('flame'),0);assert.equal(g.effectTier('flame'),0);
 });
 test('offers favor two unlocked skills and allow a selected skill to reach rank three',()=>{

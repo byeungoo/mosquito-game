@@ -1,5 +1,8 @@
+import { LATE_BOSSES, NEW_SPECIES, drawBestiaryCreature } from './bestiary.js';
 // Species change appearance, not combat stats. Evolution still determines strength.
 export const SPECIES = [
+  ...NEW_SPECIES,
+  ...LATE_BOSSES,
   { id: 'needle', name: '송곳흡혈귀', wave: 1, color: '#f6bd87', detail: '긴 흡혈침 · 마디진 복부 · 가느다란 네 날개' },
   { id: 'mantis', name: '낫팔 사냥꾼', wave: 1, color: '#bae58c', detail: '접혔다 펴지는 거대한 낫팔과 갈라진 턱' },
   { id: 'lantern', name: '심해등불 모기', wave: 2, color: '#79e6df', detail: '빛나는 유인등 · 투명한 배 · 해파리 촉수' },
@@ -8,6 +11,10 @@ export const SPECIES = [
   { id: 'brood', name: '눈알 포식자', wave: 4, color: '#f594b8', detail: '여섯 개의 눈 · 부풀어 오른 주머니 · 원형 이빨' },
   { id: 'wraith', name: '해골 망령', wave: 5, color: '#c1d8fa', detail: '빈 눈구멍과 드러난 갈비뼈, 너덜너덜한 날개' },
   { id: 'hydra', name: '삼두 재앙룡', wave: 6, color: '#ff8d7c', detail: '세 개의 흡혈 머리와 꿈틀거리는 용의 꼬리' },
+  {id:'phoenix',name:'불사조 모기',wave:7,color:'#ffb377',detail:'불꽃 모양의 여섯 날개 · 타오르는 꼬리 깃털'},
+  {id:'crystal',name:'수정 갑충모기',wave:9,color:'#a0f0ff',detail:'반투명 수정 외골격 · 다이아몬드 날개와 흡혈침'},
+  {id:'centipede',name:'백족 모기',wave:11,color:'#dfcf7e',detail:'길게 이어지는 열두 마디 · 물결치는 수십 개의 다리'},
+  {id:'eclipse',name:'일식 모기',wave:14,color:'#cf9fff',detail:'검은 태양의 복부 · 궤도를 도는 세 눈 · 초승달 날개'},
   { id: 'tyranno', name: '모기 티라노', wave: 16, boss: true, rank: 5, color: '#ffad61', detail: '보스 · 체력 140 · 거대 턱과 흡혈침. 7초마다 포효해 주변 성충을 3초간 가속합니다.' },
   { id: 'robot', name: '모기 로봇', wave: 20, boss: true, rank: 6, color: '#76e5ff', detail: '보스 · 체력 240 · 9초마다 4초 보호막으로 피해를 절반 흡수. 전기 방전봉·천뢰난무로 파괴하세요.' },
 ];
@@ -19,7 +26,9 @@ export function speciesForSpawn(id, level) {
 
 // Canvas-native art, reused in the pond and the field guide.
 export function drawMonster(ctx, enemy, time) {
+  const extra=speciesOf(enemy);if(extra.shape){drawBestiaryCreature(ctx,enemy,extra,time);return;}
   if(enemy.rank>=5 || ['tyranno','robot'].includes(enemy.species)){drawBossMonster(ctx,enemy,time);return;}
+  if(['phoenix','crystal','centipede','eclipse'].includes(enemy.species)){drawExoticMonster(ctx,enemy,time);return;}
   const s = speciesOf(enemy), c = s.color, rank = enemy.rank || 0;
   const t = enemy.frozen ? 0 : time, phase = enemy.seed || 0;
   const beat = .65 + Math.abs(Math.sin(t * (s.id === 'bat' ? 18 : 42) + phase)) * .45;
@@ -79,6 +88,32 @@ export function drawMonster(ctx, enemy, time) {
   if(rank>=2)for(let i=0;i<3;i++)for(const side of [-1,1])poly([[-13+i*5,side*3],[-16+i*5,side*(8+rank)],[-9+i*5,side*4]],c);
   if(rank===4){poly([[2,-5],[1,-14],[7,-10],[11,-18],[14,-9],[18,-13],[16,-3]],'#ffd27e');eye(10,-8,2);}
   ctx.restore();
+}
+
+function drawExoticMonster(c,e,time){
+ const id=e.species,color=speciesOf(e).color,t=e.frozen?0:time;
+ const oval=(x,y,rx,ry,fill)=>{c.beginPath();c.ellipse(x,y,rx,ry,0,0,Math.PI*2);c.fillStyle=fill;c.fill();};
+ const poly=(points,fill)=>{c.beginPath();points.forEach(([x,y],i)=>i?c.lineTo(x,y):c.moveTo(x,y));c.closePath();c.fillStyle=fill;c.fill();c.strokeStyle=color;c.lineWidth=.7;c.stroke();};
+ c.save();c.lineCap='round';c.strokeStyle=color;c.lineWidth=1;
+ if(id==='centipede'){
+  for(let i=11;i>=0;i--){const x=9-i*4,y=Math.sin(t*7+i*.5)*4;for(const side of [-1,1]){c.beginPath();c.moveTo(x,y);c.lineTo(x-2,y+side*8);c.lineTo(x-6,y+side*(12+Math.sin(t*8+i)));c.stroke();}oval(x,y,4.2,4.5,i%2?'#716346':color);}
+  for(const side of [-1,1])poly([[2,0],[-8,side*22],[-20,side*14],[-12,side*3]],'#eaf6b04a');
+ }else if(id==='crystal'){
+  for(const side of [-1,1])for(let i=0;i<3;i++){const wing=side*(14+i*4+Math.sin(t*10+i)*2);poly([[-3,0],[-12-i*5,wing],[-24-i*3,wing*.7],[-18,side*3]],i%2?'#b9faff66':'#7fc8f399');}
+  poly([[-23,0],[-12,-10],[3,-7],[9,0],[0,8],[-13,10]],'#65a9bc');poly([[-21,-1],[-11,-8],[-2,0],[-12,8]],'#e9ffff');
+  for(let i=0;i<3;i++)poly([[-16+i*7,-5],[-13+i*7,-17],[-8+i*7,-5]],'#c6faffbb');
+ }else if(id==='phoenix'){
+  for(const side of [-1,1])for(let i=0;i<3;i++){c.beginPath();c.moveTo(2,side*2);c.quadraticCurveTo(-5-i*8,side*(27+Math.sin(t*12+i)*4),-26-i*3,side*(19-i*4));c.quadraticCurveTo(-13,side*7,2,side*2);c.fillStyle=['#ff9f5677','#ffe19c99','#f76b6477'][i];c.fill();}
+  for(let i=0;i<3;i++)poly([[-8,-3],[-37-Math.sin(t*8+i)*5,(i-1)*7],[-13,4]],i%2?'#ffe19f':'#ff925d');oval(-5,0,11,5,'#9f4246');oval(-6,0,7,3,'#ffc887');
+ }else{
+  for(const side of [-1,1]){c.beginPath();c.moveTo(3,0);c.quadraticCurveTo(-7,side*35,-29,side*16);c.quadraticCurveTo(-9,side*20,-9,side*6);c.closePath();c.fillStyle='#c9a6ff77';c.fill();}
+  oval(-8,0,14,14,'#100e2b');c.beginPath();c.ellipse(-8,0,15,15,0,0,Math.PI*2);c.strokeStyle='#e5b7ff';c.lineWidth=2;c.stroke();
+  for(let i=0;i<3;i++){const a=i*Math.PI*2/3+t*.7;oval(-8+Math.cos(a)*10,Math.sin(a)*10,2.5,2.5,'#ffe5bb');oval(-8+Math.cos(a)*10,Math.sin(a)*10,1,1.8,'#4c2359');}
+ }
+ oval(10,0,6,4,color);oval(12,-2,2,1.6,'#fff8ce');oval(12,2,2,1.6,'#fff8ce');
+ c.strokeStyle='#fff1c7';c.lineWidth=1.2;c.beginPath();c.moveTo(15,0);c.lineTo(31,0);c.stroke();
+ for(const side of [-1,1]){c.beginPath();c.moveTo(10,side*3);c.lineTo(17,side*10);c.lineTo(22,side*9);c.stroke();}
+ if(e.rank===4)poly([[1,-7],[0,-16],[6,-12],[10,-20],[14,-12],[18,-16],[16,-5]],'#ffd77b');c.restore();
 }
 
 function drawBossMonster(c,e,time){

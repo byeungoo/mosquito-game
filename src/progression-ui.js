@@ -1,4 +1,4 @@
-import { UPGRADES, SKILL_FORMS } from './upgrades.js';
+import { UPGRADES, SKILL_FORMS, upgradeRequiredWave } from './upgrades.js';
 
 export function setupProgression({game,pause,resume,onSelect}) {
   const $=id=>document.getElementById(id), dialog=$('upgrade-dialog');
@@ -24,7 +24,7 @@ export function setupProgression({game,pause,resume,onSelect}) {
   }
   function renderOptions() {
     $('upgrade-wave').textContent=`WAVE ${game.upgradeWave} ${game.upgradeSource==='boss'?'보스 전리품':'보급'} · 남은 강화 ${game.upgradeQueue.length+1}개`;
-    const canReroll=game.rerolls>0 && UPGRADES.filter(p=>p.minWave<=game.level && (game.upgrades[p.id]||0)<p.max && !game.upgradeOffer.includes(p.id)).length>=game.upgradeOffer.length;
+    const canReroll=game.rerolls>0 && UPGRADES.filter(p=>upgradeRequiredWave(p,game.upgrades)<=game.level && (game.upgrades[p.id]||0)<p.max && !game.upgradeOffer.includes(p.id)).length>=game.upgradeOffer.length;
     $('upgrade-reroll').disabled=!canReroll;
     $('upgrade-reroll').textContent=`다시 뽑기 · ${game.rerolls}회`;
     $('upgrade-reroll').title=canReroll?'현재 카드와 겹치지 않는 새 선택지':'다시 뽑기 횟수 또는 다른 강화 후보가 부족합니다';
@@ -33,7 +33,7 @@ export function setupProgression({game,pause,resume,onSelect}) {
       const p=UPGRADES.find(p=>p.id===id),button=document.createElement('button');
       button.className='upgrade-option';button.type='button';
       const current=game.upgrades[id]||0,next=current+1;
-      button.innerHTML=`<span class="upgrade-category">${p.category}${p.weapon?' · 이펙트 진화':''}</span><svg aria-hidden="true"><use href="#i-${p.icon}"/></svg><strong>${p.name}</strong><span class="upgrade-rank">LV ${current} → ${next} / ${p.max}</span><span class="upgrade-description">${p.description}${p.weapon?`<br><b>✦ ${SKILL_FORMS[p.weapon][next-1]}</b> · 같은 기술을 3회까지 강화`:''}</span><span class="upgrade-choose">이 강화 선택 →</span>`;
+      button.innerHTML=`<span class="upgrade-category">${p.category}${p.weapon?' · 이펙트 진화':''}</span><svg aria-hidden="true"><use href="#i-${p.icon}"/></svg><strong>${p.name}</strong><span class="upgrade-rank">LV ${current} → ${next} / ${p.max}</span><span class="upgrade-description">${p.description}${p.weapon?`<br><b>✦ ${SKILL_FORMS[p.weapon][next-1]}</b> · 4단계 W12 / 5단계 W18 개방`:''}</span><span class="upgrade-choose">이 강화 선택 →</span>`;
       button.addEventListener('click',()=>{
         if(!game.chooseUpgrade(id))return;
         refresh();onSelect(p);

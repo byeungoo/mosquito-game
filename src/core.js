@@ -1,16 +1,18 @@
+import { LATE_BOSSES, lateBossOf, bossPeriod, performBossPattern } from './bestiary.js';
 import { speciesForSpawn } from './monsters.js';
-import { UPGRADES, offerUpgrades } from './upgrades.js';
+import { UPGRADES, offerUpgrades, SKILL_MAX_RANK, upgradeRequiredWave } from './upgrades.js';
 export const WORLD = { width: 1000, height: 700 };
 export const THREAT_LIMIT = 30;
 export const WAVE_SECONDS = 22;
 export const EVOLUTION_SECONDS = 15;
-export const ALLY_LIMITS = { loach: 10, frog: 10 };
+export const ALLY_LIMITS = { loach: 2, frog: 2 };
 export const ALLY_ATTACK_INTERVALS = { loach: 1.5, frog: 1.3 };
 export const maxRankForLevel = level => level >= 8 ? 4 : level >= 5 ? 3 : level >= 3 ? 2 : 1;
 // Late bosses replace scheduled queens; natural evolution still ends at queen.
-export const bossRankForWave = wave => wave < 16 ? 4 : wave < 20 ? 5 : ((wave-20)/4)%2===0 ? 6 : 5;
+export const bossRankForWave = wave => wave < 16 ? 4 : wave < 20 ? 5 : wave < 24 ? 6 : 7+Math.floor((wave-24)/4)%10;
 // Blend encounter rates rather than rounding enemy batches upward at every wave.
 export function spawnRateForLevel(level) {
+  if(level>6)return spawnRateForLevel(6)+.48*(level-6)/(1+(level-6)/18);
   const denseRate = Math.min(10, 3 + Math.floor(level / 2)) / Math.max(.45, 1.65 - level * .09);
   const steadyRate = Math.min(10, 3 + Math.floor(level / 3)) / Math.max(.6, 1.65 - (level - 1) * .05);
   return (denseRate + steadyRate) / 2;
@@ -23,14 +25,15 @@ export const EVOLUTIONS = [
   { name: '재앙의 여왕', hp: 65, threat: 10, scale: 3.2, color: '#ff638e', speed: .8, points: 100 },
   { name: '모기 티라노', hp: 140, threat: 12, scale: 3.5, color: '#ffad61', speed: .75, points: 250 },
   { name: '모기 로봇', hp: 240, threat: 14, scale: 3.7, color: '#76e5ff', speed: .65, points: 450 },
+  ...LATE_BOSSES,
 ];
 export const WEAPONS = [
   { id: 'net', key: '1', unlock: 1, name: '대왕 뜰채', icon: 'net', tag: '기본 공격 · 물속 + 공중', cooldown: .48, radius: 56, damage: 1, description: '물속은 한 번에, 일반 성충은 두 번! 드래그로 연속 공격해요.', hint: '클릭 / 드래그 · 기본 피해 1, 성충도 공격 가능' },
-  { id: 'loach', key: '2', unlock: 1, name: '미꾸라지', icon: 'fish', tag: '자동 사냥 · 물속', cooldown: 17, radius: 35, damage: 1, description: '물속을 자동 사냥해요. 최대 10마리. 진화 유충은 여러 번 공격해야 해요.', hint: '클릭 · 물속 자동 방어 (최대 10마리)' },
+  { id: 'loach', key: '2', unlock: 1, name: '미꾸라지', icon: 'fish', tag: '자동 사냥 · 물속', cooldown: 17, radius: 35, damage: 1, description: '물속을 자동 사냥해요. 최대 2마리. 진화 유충은 여러 번 공격해야 해요.', hint: '클릭 · 물속 자동 방어 (최대 2마리)' },
   { id: 'electric', key: '3', unlock: 2, name: '전기 방전봉', icon: 'bolt', tag: '광역 연쇄 · 피해 3', cooldown: 5, radius: 165, chainRadius: 145, damage: 3, description: '최대 16마리에게 연쇄 번개! 소용돌이 안의 적에게 피해가 25% 증가해요.', hint: '클릭 · 연쇄 번개 / 소용돌이 안에서 피해 +25%' },
   { id: 'flame', key: '4', unlock: 3, name: '화염 방사기', icon: 'flamethrower', tag: '지속 화염 · 물속 + 공중', cooldown: .12, radius: 155, damage: 1, dps: 16, heatPerSecond: 25, description: '연못을 누르고 있으면 범위 안 알·유충·번데기·성충 모두에게 초당 피해 16! 약 4초 연속 분사하며, 드래그로 조준할 수 있어요.', hint: '연못을 누른 채 유지 / 드래그 · 유충도 공격 · 초당 피해 16 · 과열 시 잠시 냉각' },
   { id: 'vortex', key: '5', unlock: 4, name: '소용돌이', icon: 'vortex', tag: '제어 · 감전 조합', cooldown: 13, radius: 205, description: '5초 동안 적을 끌어모아요. 범위 안의 적에게 전기 방전봉·천뢰난무 피해 +25%!', hint: '클릭 · 소용돌이 → 전기 공격으로 추가 피해' },
-  { id: 'frog', key: '6', unlock: 5, name: '개구리 특공대', icon: 'frog', tag: '고속 자동 사냥 · 물속 + 공중', cooldown: 20, radius: 35, damage: 3, description: '1.3초마다 가까운 적에게 혀를 뻗어 피해 3! 알·유충·번데기·성충 모두 공격하며 최대 10마리까지 배치해요.', hint: '클릭 · 유충과 성충 자동 공격 (최대 10마리)' },
+  { id: 'frog', key: '6', unlock: 5, name: '개구리 특공대', icon: 'frog', tag: '고속 자동 사냥 · 물속 + 공중', cooldown: 20, radius: 35, damage: 3, description: '1.3초마다 가까운 적에게 혀를 뻗어 피해 3! 알·유충·번데기·성충 모두 공격하며 최대 2마리까지 배치해요.', hint: '클릭 · 유충과 성충 자동 공격 (최대 2마리)' },
   { id: 'freeze', key: '7', unlock: 6, name: '절대 영도', icon: 'snow', tag: '빙결 · 후속 피해 증가', cooldown: 15, radius: 180, description: '성장과 이동을 5초간 정지. 얼어붙은 적은 피해를 1.5배 받아요.', hint: '클릭 · 얼린 뒤 강한 공격으로 산산조각!' },
   { id: 'palm', key: '8', unlock: 7, name: '여래신장', icon: 'palm', tag: '궁극기 · 피해 18', cooldown: 27, radius: 255, damage: 18, description: '황금 손바닥으로 강타! 여왕은 살아남을 수 있어요. 빙결과 조합하세요.', hint: '클릭 · 황금 손바닥, 넓은 범위에 피해 18' },
   { id: 'dragon', key: '9', unlock: 8, name: '용왕 강림', icon: 'dragon', tag: '전설 · 전장 관통', cooldown: 32, radius: 120, damage: 25, description: '지정한 높이로 용이 솟아올라 전장을 가로지르며 피해 25를 줘요.', hint: '클릭 · 선택한 높이의 가로 영역을 용왕이 관통' },
@@ -42,7 +45,12 @@ export const WEAPONS = [
   { id: 'thunderstorm', key: 'r', unlock: 11, name: '천뢰난무', icon: 'bolt', tag: '필살기 · 전장 전체', cooldown: 45, radius: 1200, damage: 24, description: '연못 전체에 벼락을 쏟아 모든 적에게 피해 24! 재사용 45초. 빙결과 조합하면 더욱 강력해요.', hint: 'R 선택 후 클릭 · 전장 전체에 벼락 / 피해 24' },
   { id: 'timestop', key: 't', unlock: 6, name: '타임스톱', icon: 'rewind', tag: '시간 정지 · 전장 전체', cooldown: 32, radius: 1200, description: '4초 동안 적의 이동·성장·증식·신규 출현과 붕괴 게이지를 멈춥니다. 아군과 공격은 계속돼요.', hint: 'T 선택 후 클릭 · 전장 전체 시간 정지 4초' },
   { id: 'bigbang', key: 'b', unlock: 12, name: '빅뱅 어택', icon: 'bigbang', tag: '초필살기 · 우주 대폭발', cooldown: 70, radius: 1200, damage: 65, description: '1.2초간 우주 에너지를 압축한 뒤 전장 전체에 피해 65! 재사용 70초. 빙결과 조합하세요.', hint: 'B 선택 후 클릭 · 1.2초 압축 → 우주 대폭발' },
+  {id:'sanctuary',key:'y',unlock:9,name:'연꽃 성역',icon:'lotus',tag:'정화 · 공격과 회복',cooldown:28,radius:170,damage:2,description:'지정한 곳에 5초간 성역을 펼칩니다. 1초마다 피해 2와 붕괴 게이지 0.4초 회복! 겹친 성역의 회복은 중첩되지 않아요.',hint:'Y 선택 후 클릭 · 범위 공격 + 붕괴 게이지 회복'},
+  {id:'orbital',key:'u',unlock:14,name:'궤도 레이저',icon:'orbital',tag:'지속 포격 · 전장 전체',cooldown:36,radius:1200,damage:3,description:'5초 동안 맵 전체를 궤도에서 포격합니다. 0.25초마다 모든 적에게 피해 3! 도중에 나타난 적과 물속 유충도 공격합니다.',hint:'U 선택 후 연못 터치 · 전장 전체 5초 지속 포격'},
 ];
+export const ALLY_GROWTH_THRESHOLDS=Object.freeze([90,300,750]);
+export const allyGrowth=a=>ALLY_GROWTH_THRESHOLDS.filter(threshold=>a.eaten>=threshold).length;
+export const ALLY_FORMS={loach:['미꾸라지','비늘 수호어','화염 용어','뇌룡어'],frog:['개구리','갑옷 개구리','삼중 혀 사냥꾼','연꽃 두꺼비왕']};
 export const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 export const stageOf = e => e.age < 4 ? 'egg' : e.age < 15 ? 'larva' : e.age < 20 ? 'pupa' : 'adult';
 export const evolutionOf = e => EVOLUTIONS[e.rank || 0];
@@ -96,10 +104,11 @@ export class PondGame {
   start() { this.reset(); this.status = 'playing'; }
   get adults() { return this.enemies.reduce((n, e) => n + (stageOf(e) === 'adult' ? 1 : 0), 0); }
   get threat() { return this.enemies.reduce((n, e) => n + (stageOf(e) === 'adult' ? evolutionOf(e).threat : 0), 0); }
+  get threatLimit(){return THREAT_LIMIT+Math.min(15,Math.max(0,Math.floor((this.level-8)/4))*3);}
   get waveProgress() { return (this.elapsed % WAVE_SECONDS) / WAVE_SECONDS; }
   isUnlocked(id) { return WEAPONS.some(w => w.id === id && this.level >= w.unlock); }
   get cooldownRate() { return (1 + (this.upgrades.tempo || 0) * .12)*(this.feverRemaining>0?1.3:1); }
-  skillRank(id) { return Math.min(3,this.upgrades[`skill_${id}`] || 0); }
+  skillRank(id) { return Math.min(SKILL_MAX_RANK,this.upgrades[`skill_${id}`] || 0); }
   skillPower(id) { return 1+this.skillRank(id)*.2; }
   radiusScale(id) { return ['loach','frog','thunderstorm','timestop','bigbang'].includes(id)?1:1+this.skillRank(id)*.06; }
   weaponRadius(id) { const w=WEAPONS.find(w=>w.id===id); return (w.radius + (id==='net' ? (this.upgrades.netcraft || 0)*8 : 0))*this.radiusScale(id); }
@@ -110,7 +119,7 @@ export class PondGame {
   chooseUpgrade(id) {
     if (!['playing','paused'].includes(this.status) || !this.upgradeOffer.includes(id)) return false;
     const spec=UPGRADES.find(p=>p.id===id);
-    if (!spec || this.level<spec.minWave || (this.upgrades[id] || 0)>=spec.max) return false;
+    if (!spec || this.level<upgradeRequiredWave(spec,this.upgrades) || (this.upgrades[id] || 0)>=spec.max) return false;
     this.upgrades[id]=(this.upgrades[id] || 0)+1;
     this.upgradeOffer=[]; this.emit('upgraded',{id,rank:this.upgrades[id]});this.nextUpgrade(); return true;
   }
@@ -139,14 +148,14 @@ export class PondGame {
     const hp = age >= 20 ? EVOLUTIONS[rank].hp : 1 + Math.floor(rank / 2);
     const e = { id: this.nextId++, x: 500 + Math.cos(angle) * 420 * radius, y: 390 + Math.sin(angle) * 245 * radius, age, rank, hp, maxHp: hp, evolve: 0, breed: 0, angle: this.random() * Math.PI * 2, seed: this.random() * 100, frozen: 0, turn: 0, hit: 0, sealed: 0 };
     e.species = speciesForSpawn(e.id, this.level);
-    if(rank>=5){e.species=rank===5?'tyranno':'robot';e.bossTimer=0;e.shield=0;e.rage=0;}
+    if(rank>=5){e.species=lateBossOf(rank)?.id??(rank===5?'tyranno':'robot');e.bossTimer=0;e.shield=0;e.rage=0;}
     this.enemies.push(e); return e;
   }
   emit(type, data = {}) { this.events.push({ type, ...data }); }
   spawnWaveEnemy(age,rank,bossLevel=0) {
     if(this.timeStopRemaining>0){this.pendingSpawns.push({age,rank,bossLevel});return;}
     const e=this.spawn(age,rank);
-    if(e && bossLevel){e.hp+=Math.max(0,bossLevel-(rank===6?20:rank===5?16:8))*4;e.maxHp=e.hp;this.emit('boss',{x:e.x,y:e.y,rank});}
+    if(e && bossLevel){e.hp+=Math.max(0,bossLevel-(lateBossOf(rank)?.wave??(rank===6?20:rank===5?16:8)))*4;e.maxHp=e.hp;this.emit('boss',{x:e.x,y:e.y,rank});}
   }
   drainEvents() { return this.events.splice(0); }
   damage(targets, amount, source, x, y) {
@@ -156,8 +165,8 @@ export class PondGame {
       const conductive = ['electric','thunderstorm'].includes(source) && this.fields.some(f=>f.type==='vortex' && f.remaining>0 && distance(e,f)<=f.radius);
       const base=amount+(source==='net'?(this.upgrades.netcraft || 0):0);
       const electric=['electric','thunderstorm'].includes(source);
-      if(e.rank===6 && e.shield>0 && electric){e.shield=0;this.emit('shieldBreak',{x:e.x,y:e.y});}
-      const armor=e.rank===6 && e.shield>0?.5:1;
+      if(e.shield>0 && electric){e.shield=0;this.emit('shieldBreak',{x:e.x,y:e.y});}
+      const armor=e.shield>0?.5:1;
       const hit=base*this.skillPower(source)*(1+(this.upgrades.power || 0)*.12)*(e.frozen>0?1.5+(this.upgrades.icecraft || 0)*.15:1)*(e.rank>=3&&stageOf(e)==='adult'?1+(this.upgrades.hunter || 0)*.25:1)*(conductive?1.25:1)*armor*(this.feverRemaining>0?1.2:1);
       if(conductive) combos.set('conductive',e);
       if(e.frozen>0) combos.set('frozen',e);
@@ -174,6 +183,7 @@ export class PondGame {
     const ids = new Set(dead.map(e => e.id)); this.enemies = this.enemies.filter(e => !ids.has(e.id));
     this.kills += dead.length; this.bestCombo = Math.max(this.bestCombo, dead.length);
     for (const e of dead) { this.score += stageOf(e) === 'adult' ? evolutionOf(e).points : 1 + e.rank; if (e.rank >= 4 && stageOf(e) === 'adult') {
+      if(e.rank>=7){this.spawnTimer=Math.max(this.spawnTimer,8);this.danger=Math.max(0,this.danger-2);}
       this.bossKills++;this.emit('bossKilled', { x: e.x, y: e.y, rank:e.rank });
       if(!this.bossRewardWaves.has(this.level)){this.bossRewardWaves.add(this.level);this.rerolls=Math.min(3,this.rerolls+1);this.queueUpgrade('boss');this.emit('bossLoot',{x:e.x,y:e.y});}
     } }
@@ -222,6 +232,10 @@ export class PondGame {
     if(id==='bigbang') {
       this.fields.push({type:'bigbang',x:500,y:350,remaining:1.2,radius:w.radius});
       this.emit('bigbangCharge',{x:500,y:350});return {ok:true};
+    }
+    if(id==='sanctuary'||id==='orbital'){
+      this.fields.push({type:id,x,y,remaining:5,pulse:0,radius:w.radius});
+      this.emit(id,{x,y,radius:w.radius});return {ok:true};
     }
     if (id === 'thunderstorm') {
       const strikes = this.enemies.map(e => ({ x: e.x, y: e.y }));
@@ -350,7 +364,17 @@ export class PondGame {
         this.emit('detonate', { x: f.x, y: f.y, radius, source: f.type, count });
       }
     }
+    let sanctuaryRecovery=0;
     for (const f of this.fields) {
+      if(f.type==='sanctuary'||f.type==='orbital'){
+        if(f.type==='sanctuary')sanctuaryRecovery=Math.max(sanctuaryRecovery,dt*(.4+this.skillRank('sanctuary')*.08));
+        f.pulse-=dt;
+        if(f.pulse<=0){
+          f.pulse+=f.type==='sanctuary'?1:.25;
+          this.damage(f.type==='orbital'?[...this.enemies]:this.enemies.filter(e=>distance(e,f)<=f.radius),f.type==='sanctuary'?2:3,f.type,f.x,f.y);
+          if(f.type==='orbital'){f.salvos=(f.salvos||0)+1;if(f.salvos%2===1)this.emit('orbitalSalvo');}
+        }
+      }
       if (f.type !== 'chorus') continue;
       f.pulse -= dt;
       if (f.pulse <= 0) {
@@ -369,6 +393,7 @@ export class PondGame {
     }
     let offspring = 0;
     for (const e of this.enemies) {
+      if(e.consumed)continue;
       e.hit = Math.max(0, e.hit - dt);
       if(timeStopped)continue;
       e.sealed = Math.max(0, e.sealed - dt);
@@ -386,13 +411,14 @@ export class PondGame {
         if (e.rank >= 3 && e.rank <= 4) { e.breed += dt; if (e.breed >= 8.5) { e.breed = 0; offspring += e.rank === 4 ? 4 : 2; this.emit('breed', { x: e.x, y: e.y }); } }
         e.rage=Math.max(0,(e.rage||0)-dt);e.shield=Math.max(0,(e.shield||0)-dt);
         if(e.rank>=5){
-          const period=e.rank===5?7:9;
+          const period=bossPeriod(e.rank);
           if(e.bossTimer<period-1.2 && e.bossTimer+dt>=period-1.2)this.emit('bossWindup',{x:e.x,y:e.y,rank:e.rank});
           e.bossTimer=(e.bossTimer||0)+dt;
-          if(e.bossTimer>=(e.rank===5?7:9)){
+          if(e.bossTimer>=period){
             e.bossTimer=0;
             if(e.rank===5){for(const nearby of this.enemies)if(stageOf(nearby)==='adult' && distance(e,nearby)<=260)nearby.rage=3;this.emit('bossRoar',{x:e.x,y:e.y,radius:260});}
-            else {e.shield=4;this.emit('bossShield',{x:e.x,y:e.y});}
+            else if(e.rank===6){e.shield=4;this.emit('bossShield',{x:e.x,y:e.y});}
+            else performBossPattern(this,e);
           }
         }
       }
@@ -416,6 +442,7 @@ export class PondGame {
     for (let i = 0; i < offspring; i++) this.spawn(5);
     const claimedPrey = new Set();
     for (const a of this.allies) {
+      const growth=allyGrowth(a),beforeGrowth=growth;
       a.attack -= dt * (1+(this.upgrades.pack || 0)*.2);
       const edible = this.enemies.filter(e => a.type === 'frog' || (stageOf(e) !== 'adult' && !claimedPrey.has(e.id)));
       let target = null, nearest = Infinity;
@@ -429,15 +456,23 @@ export class PondGame {
           const desired = Math.atan2(target.y - a.y, target.x - a.x), turn = Math.atan2(Math.sin(desired - a.angle), Math.cos(desired - a.angle));
           a.angle += Math.max(-dt * 5, Math.min(dt * 5, turn));
           const step = Math.min(nearest, dt * 100); a.x += Math.cos(a.angle) * step; a.y += Math.sin(a.angle) * step;
-          if (nearest < 26 && a.attack <= 0) { a.eaten += this.damage([target], 1, 'loach', a.x, a.y); a.attack = ALLY_ATTACK_INTERVALS.loach; }
+          if (nearest < 26 && a.attack <= 0) { a.eaten += this.damage([target], 1+growth*.2, 'loach', a.x, a.y); a.attack = ALLY_ATTACK_INTERVALS.loach/(1+growth*.1); }
         } else { a.angle += Math.sin(this.elapsed * .7 + a.seed) * dt * .8; a.x += Math.cos(a.angle) * dt * 24; a.y += Math.sin(a.angle) * dt * 24; }
         reflectAtPondEdge(a);
       } else if (target && nearest < 280 && a.attack <= 0) {
-        this.emit('tongue', { from: { x: a.x, y: a.y }, to: { x: target.x, y: target.y } }); a.eaten += this.damage([target], 3, 'frog', target.x, target.y); a.attack = ALLY_ATTACK_INTERVALS.frog; a.angle = Math.atan2(target.y - a.y, target.x - a.x);
+        const victims=[target,...(growth>=2?edible.filter(e=>e!==target&&distance(e,target)<110).slice(0,growth===3?4:2):[])];
+        for(const victim of victims)this.emit('tongue', { from: { x: a.x, y: a.y }, to: { x: victim.x, y: victim.y } });
+        a.eaten += this.damage(victims,3+growth*.6,'frog',target.x,target.y);a.attack=ALLY_ATTACK_INTERVALS.frog/(1+growth*.1);a.angle=Math.atan2(target.y-a.y,target.x-a.x);
       }
+      if(a.type==='loach'&&growth>=2){
+        a.breath=Math.max(0,(a.breath||0)-dt);
+        if(a.breath<=0){const prey=this.enemies.filter(e=>distance(e,a)<=180).sort((x,y)=>distance(x,a)-distance(y,a))[0];if(prey){const victims=this.enemies.filter(e=>distance(e,prey)<=65).slice(0,growth===3?5:3);a.eaten+=this.damage(victims,3+growth,'loach',prey.x,prey.y);a.breath=4;this.emit('allyBreath',{from:{x:a.x,y:a.y},to:{x:prey.x,y:prey.y},growth});}}
+      }
+      if(allyGrowth(a)>beforeGrowth)this.emit('allyEvolve',{x:a.x,y:a.y,source:a.type,growth:allyGrowth(a),name:ALLY_FORMS[a.type][allyGrowth(a)]});
     }
     separateLoaches(this.allies);
-    if(!timeStopped)this.danger = this.threat >= THREAT_LIMIT ? this.danger + dt : Math.max(0, this.danger - dt * 2);
+    if(!timeStopped)this.danger = this.threat >= this.threatLimit ? this.danger + dt : Math.max(0, this.danger - dt * 2);
+    this.danger=Math.max(0,this.danger-sanctuaryRecovery);
     this.timeStopRemaining=Math.max(0,this.timeStopRemaining-dt);
     if (this.danger >= 5) {
       if(this.upgrades.ward && !this.wardSpent){this.wardSpent=true;this.danger=0;for(const e of this.enemies)e.frozen=Math.max(e.frozen,3);this.emit('ward');}

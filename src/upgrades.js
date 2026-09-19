@@ -1,3 +1,5 @@
+export const SKILL_MAX_RANK=5;
+export const upgradeRequiredWave=(spec,owned)=>spec.weapon?Math.max(spec.minWave,(owned[spec.id]||0)>=4?18:(owned[spec.id]||0)>=3?12:0):spec.minWave;
 export const SKILL_FORMS = {
   net:['빛의 그물','빙광 그물','황금 봉인망'],loach:['비취 수호어','창해 수호어','황금 용어'],electric:['분기 뇌격','자색 뇌룡','황금 심판'],
   flame:['삼중 화염','오중 청염','불사조 백염'],vortex:['격류 회오리','폭풍의 눈','해신의 소용돌이'],frog:['비취 특공대','청해 특공대','왕관 특공대'],
@@ -5,7 +7,10 @@ export const SKILL_FORMS = {
   blackhole:['중력 고리','이중 특이점','재앙의 눈'],meteor:['작열 운석','파편 군집','천체 붕괴'],chorus:['오중 합창','칠중 공명','구중 대합창'],
   rewind:['시간의 고리','이중 시계','삼중 시간진'],talisman:['빛의 부적','봉마 결계','황금 봉인진'],thunderstorm:['분기 낙뢰','자색 폭풍','천벌의 그물'],
   timestop:['정지된 순간','영원의 경계','시간의 지배자'],bigbang:['초신성','은하 붕괴','우주 창세'],
+  sanctuary:['연화 결계','치유의 호수','생명의 정원'],orbital:['광자 포격','플라스마 기둥','천공의 심판'],
 };
+const ascended={net:['별빛 포획진','차원 봉인망'],loach:['태양 용어','천둥 신룡어'],frog:['연꽃 선인','천상 두꺼비왕'],electric:['성운 뇌격','차원 번개'],flame:['태양의 날개','백금 태양신'],vortex:['천공 해일','차원 소용돌이'],freeze:['영겁의 빙하','시간마저 얼리는 별'],palm:['천수 관음','우주를 받치는 손'],dragon:['오룡 해신제','육룡 천상강림'],blackhole:['은하 포식자','사건의 지평선'],meteor:['행성 파쇄','별의 장례식'],chorus:['천상 합창','세계의 공명'],rewind:['운명의 회귀','태초의 시계'],talisman:['천만 부적','인과 봉인'],thunderstorm:['뇌신의 행차','만뢰 천벌'],timestop:['멈춰버린 세계','영원의 주인'],bigbang:['다중 우주','새로운 창세'],sanctuary:['불멸의 연꽃','세계수의 연못'],orbital:['궤도 섬멸','태양의 창']};
+for(const [id,names] of Object.entries(ascended))SKILL_FORMS[id].push(...names);
 export const SKILL_UPGRADES = [
   ['net','대왕 뜰채','net',2],['loach','미꾸라지','fish',2],['electric','전기 방전봉','bolt',2],
   ['flame','화염 방사기','flamethrower',3],['vortex','소용돌이','vortex',4],['frog','개구리 특공대','frog',5],
@@ -13,7 +18,10 @@ export const SKILL_UPGRADES = [
   ['blackhole','모기 블랙홀','blackhole',9],['meteor','천벌 유성우','meteor',10],
   ['chorus','두꺼비 합창','chorus',4],['rewind','시간 되감기','rewind',5],['talisman','연쇄 부적','talisman',7],['thunderstorm','천뢰난무','bolt',11],
   ['timestop','타임스톱','rewind',6],['bigbang','빅뱅 어택','bigbang',12],
-].map(([weapon,name,icon,minWave])=>({id:`skill_${weapon}`,weapon,name:`${name} 진화`,icon,minWave,max:3,category:'기술 진화',description:
+  ['sanctuary','연꽃 성역','lotus',9],['orbital','궤도 레이저','orbital',14],
+].map(([weapon,name,icon,minWave])=>({id:`skill_${weapon}`,weapon,name:`${name} 진화`,icon,minWave,max:SKILL_MAX_RANK,category:'기술 진화',description:
+  weapon==='orbital'?'전장 전체 포격 피해 +20%. 레이저 기둥과 궤도 고리가 더욱 화려해집니다.':
+  weapon==='sanctuary'?'피해 +20%, 반경 +6%. 정화량과 연꽃 결계가 함께 성장합니다.':
   weapon==='timestop'?'시간 정지 +1초. 신규 출현과 적의 시간이 멈추며 시계 결계가 진화합니다.':
   weapon==='bigbang'?'전장 전체 피해 +20%. 초신성 → 은하 붕괴 → 우주 창세로 대폭발이 진화합니다.':
   weapon==='dragon'?'용 1마리 추가! 총 피해 +20%, 반경 +6%. 거대한 파도와 낙뢰가 강화됩니다.':
@@ -36,14 +44,14 @@ export const UPGRADES = [
 ];
 
 export function offerUpgrades(level, owned, random, excluded=[]) {
-  const pool = UPGRADES.filter(p => !excluded.includes(p.id) && p.minWave <= level && (owned[p.id] || 0) < p.max);
+  const pool = UPGRADES.filter(p => !excluded.includes(p.id) && upgradeRequiredWave(p,owned) <= level && (owned[p.id] || 0) < p.max);
   // Fisher–Yates without changing the shared catalog.
   for(let i=pool.length-1;i>0;i--) {
     const j=Math.min(i,Math.floor(random()*(i+1)));
     [pool[i],pool[j]]=[pool[j],pool[i]];
   }
   const skills=pool.filter(p=>p.weapon), repeat=skills.find(p=>owned[p.id]>0), chosen=[];
-  // Always offer an unfinished specialization again so a three-rank build is achievable.
+  // Always offer an unfinished specialization again so a focused build is achievable.
   if(repeat)chosen.push(repeat);
   for(const p of skills) if(chosen.length<2 && !chosen.includes(p))chosen.push(p);
   const general=pool.find(p=>!p.weapon);if(general)chosen.push(general);

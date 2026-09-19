@@ -25,7 +25,7 @@ export function drawTimeStop(c,{width,height,rank=0}) {
 }
 
 export function dragonFormation(rank) {
-  const count=1+Math.max(0,Math.min(3,Math.floor(rank)));
+  const count=1+Math.max(0,Math.min(5,Math.floor(rank)));
   return Array.from({length:count},(_,i)=>({offset:count===1?0:(i/(count-1)-.5)*190,delay:i*.045}));
 }
 
@@ -37,7 +37,7 @@ export function drawDragonSummon(c,{t,y,width,unit,sy,rank=0,reducedMotion=false
     const base=y-band*.8+layer*band*1.6/(1+rank),amplitude=(12+rank*6)*sy;
     const wave=x=>base+Math.sin(x/width*Math.PI*4-phase-layer)*amplitude;
     const water=c.createLinearGradient(0,base-amplitude,0,base+band*.8);
-    water.addColorStop(0,rank===3?'#a8eaff80':'#58dedd70');water.addColorStop(1,'#1478c000');
+    water.addColorStop(0,rank>=3?'#a8eaff80':'#58dedd70');water.addColorStop(1,'#1478c000');
     c.beginPath();c.moveTo(0,wave(0));for(let i=1;i<=36;i++){const x=i*width/36;c.lineTo(x,wave(x));}c.lineTo(width,base+band);c.lineTo(0,base+band);c.closePath();c.fillStyle=water;c.fill();
     c.beginPath();for(let i=0;i<=36;i++){const x=i*width/36;i?c.lineTo(x,wave(x)):c.moveTo(x,wave(x));}c.strokeStyle='#cbffff';c.lineWidth=Math.max(1.5,(3+rank)*unit);c.stroke();
     for(let i=0;i<5+rank*2;i++){const x=((i/(5+rank*2)+t*.12)%1)*width;c.beginPath();c.arc(x,wave(x)-7*unit,(7+rank*3)*unit,Math.PI*.9,Math.PI*1.9);c.stroke();}
@@ -48,7 +48,7 @@ export function drawDragonSummon(c,{t,y,width,unit,sy,rank=0,reducedMotion=false
     c.save();c.globalAlpha*=Math.sin(age/.32*Math.PI);
     const x=(.08+((i*.618)%1)*.84)*width,endY=y+Math.sin(i*3)*band*.65,startY=Math.max(0,y-band*2.1);
     c.beginPath();c.moveTo(x-25*unit,startY);for(let j=1;j<=8;j++)c.lineTo(x+(j===8?0:Math.sin(i*13+j*7)*(18+rank*5)*unit),startY+(endY-startY)*j/8);
-    c.strokeStyle=rank===3?'#e5b9ff':'#76c8ff';c.lineWidth=Math.max(3,(7+rank*3)*unit);c.shadowColor=c.strokeStyle;c.shadowBlur=reducedMotion?0:12;c.stroke();c.strokeStyle='#ffffff';c.lineWidth=Math.max(1,(2+rank)*unit);c.stroke();
+    c.strokeStyle=rank>=3?'#e5b9ff':'#76c8ff';c.lineWidth=Math.max(3,(7+rank*3)*unit);c.shadowColor=c.strokeStyle;c.shadowBlur=reducedMotion?0:12;c.stroke();c.strokeStyle='#ffffff';c.lineWidth=Math.max(1,(2+rank)*unit);c.stroke();
     c.beginPath();c.ellipse(x,endY,(15+age*95)*unit,(5+age*28)*unit,0,0,Math.PI*2);c.stroke();c.restore();
   }
   for(const dragon of formation) drawDragonKing(c,{t:Math.max(0,t-dragon.delay),y:y+dragon.offset*sy,width,unit:unit*(1+rank*.08),rank,reducedMotion});
@@ -76,7 +76,7 @@ export function drawDragonKing(c, { t, y, width, unit: u, reducedMotion, rank=0 
   }
   for(let i=72;i>=0;i--) {
     const x=head-i*7*u, yy=wave(i), r=(5+17*(1-i/82))*u;
-    oval(x,yy,r*1.2,r,'#164a59');oval(x,yy-2*u,r*.98,r*.83,rank===3?(i%2?'#c4a3ff':'#f1dfff'):rank>0?(i%2?'#d3a74e':'#ffe1a0'):(i%2?'#39a99c':'#69cfab'));
+    oval(x,yy,r*1.2,r,'#164a59');oval(x,yy-2*u,r*.98,r*.83,rank>=3?(i%2?'#c4a3ff':'#f1dfff'):rank>0?(i%2?'#d3a74e':'#ffe1a0'):(i%2?'#39a99c':'#69cfab'));
     oval(x,yy+r*.48,r*.65,r*.35,'#ecdc9a');
     if(i%3===0){poly([[x+5*u,yy-r*.65],[x-7*u,yy-r-18*u],[x-13*u,yy-r*.45]],'#e7cc80');stroke([[x-3*u,yy-r*.25],[x+2*u,yy],[x-3*u,yy+r*.2]],'#167c7b',1.4*u);}
   }
@@ -86,8 +86,8 @@ export function drawDragonKing(c, { t, y, width, unit: u, reducedMotion, rank=0 
     stroke([[-12,side*13],[-26,side*33],[-22,side*53],[-38,side*64]],'#ffdf9b',5);
     stroke([[-25,side*35],[-43,side*40],[-48,side*53]],'#ffdf9b',3);
   }
-  poly([[-34,-15],[-12,-27],[20,-22],[36,-9],[59,-4],[62,9],[37,19],[13,23],[-25,16]],rank===3?'#ac83e5':rank>0?'#bf9449':'#208881');
-  poly([[-22,-17],[4,-25],[28,-15],[18,-3],[-10,2]],rank===3?'#f5ddff':rank>0?'#ffe3a6':'#78ddbb');
+  poly([[-34,-15],[-12,-27],[20,-22],[36,-9],[59,-4],[62,9],[37,19],[13,23],[-25,16]],rank>=3?'#ac83e5':rank>0?'#bf9449':'#208881');
+  poly([[-22,-17],[4,-25],[28,-15],[18,-3],[-10,2]],rank>=3?'#f5ddff':rank>0?'#ffe3a6':'#78ddbb');
   poly([[15,9],[60,5],[53,21],[22,27],[4,17]],'#0c3344');
   poly([[20,20],[54,18],[47,27],[18,30]],'#d0e8ad');
   for(let i=0;i<4;i++)poly([[23+i*8,8],[28+i*8,8],[25+i*8,16]],'#fff3ce');
@@ -111,7 +111,7 @@ export function drawThunderstorm(c, { t, width, height, strikes, sx, sy, reduced
     c.globalAlpha*=1-age/.5;c.beginPath();c.moveTo(x-30*sx,0);
     for(let k=1;k<9;k++)c.lineTo(x+Math.sin(i*7+k*9)*(k===8?0:26)*sx,y*k/8);
     c.strokeStyle=tier>=3?'#a88aff':'#638fff';c.lineWidth=(7+tier+rank*7)*sx;c.stroke();c.strokeStyle='#e7f8ff';c.lineWidth=(2+tier*.3+rank)*sx;c.stroke();
-    if(rank){for(let j=0;j<rank;j++){const yy=y*(.3+j*.18);c.beginPath();c.moveTo(x,yy);c.lineTo(x+(j%2?55:-55)*sx,yy+25*sy);c.lineTo(x+(j%2?28:-28)*sx,yy+45*sy);c.lineTo(x+(j%2?85:-85)*sx,yy+65*sy);c.strokeStyle=rank===3?'#ffe3a0':'#c5b3ff';c.lineWidth=(2+rank)*sx;c.stroke();}}
+    if(rank){for(let j=0;j<rank;j++){const yy=y*(.3+j*.18);c.beginPath();c.moveTo(x,yy);c.lineTo(x+(j%2?55:-55)*sx,yy+25*sy);c.lineTo(x+(j%2?28:-28)*sx,yy+45*sy);c.lineTo(x+(j%2?85:-85)*sx,yy+65*sy);c.strokeStyle=rank>=3?'#ffe3a0':'#c5b3ff';c.lineWidth=(2+rank)*sx;c.stroke();}}
     c.beginPath();c.ellipse(x,y,(12+age*90)*sx,(4+age*28)*sy,0,0,Math.PI*2);c.strokeStyle='#adccff';c.lineWidth=1.5;c.stroke();
     c.globalAlpha=1;
   });c.restore();

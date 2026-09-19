@@ -24,7 +24,7 @@ test('reroll replaces every card, consumes one charge and never repeats a maxed 
  g.rerolls=0;const offer=[...g.upgradeOffer];assert.equal(g.rerollUpgrade(),false);assert.deepEqual(g.upgradeOffer,offer);
 });
 test('reroll with too few alternatives keeps the charge and exhausted upgrade pools do not block',()=>{
- const g=setup(30);g.upgrades=Object.fromEntries(UPGRADES.map(p=>[p.id,p.max]));g.upgrades.skill_net=2;g.queueUpgrade();
+ const g=setup(30);g.upgrades=Object.fromEntries(UPGRADES.map(p=>[p.id,p.max]));g.upgrades.skill_net=4;g.queueUpgrade();
  assert.equal(g.upgradeOffer.length,1);assert.equal(g.rerollUpgrade(),false);assert.equal(g.rerolls,2);
  g.queueUpgrade('boss');g.chooseUpgrade('skill_net');assert.deepEqual(g.upgradeOffer,[]);assert.deepEqual(g.upgradeQueue,[]);
 });

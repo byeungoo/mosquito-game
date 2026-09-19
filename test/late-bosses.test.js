@@ -6,7 +6,7 @@ function boss(g,rank){const e=g.spawn(20,rank);Object.assign(e,{x:500,y:390,angl
 function advance(g,n){for(let i=0;i<Math.round(n*100);i++)g.update(.01);}
 
 test('scheduled bosses progress from queens to tyrannosaur and robot, with correct warnings',()=>{
- for(const [wave,rank] of [[8,4],[12,4],[16,5],[20,6],[24,5],[28,6]]){
+ for(const [wave,rank] of [[8,4],[12,4],[16,5],[20,6],[24,7],[28,8],[60,16],[64,7]]){
   const g=setup(wave-1);g.elapsed=(wave-1)*WAVE_SECONDS-5.99;g.update(.01);
   assert.equal(g.drainEvents().find(e=>e.type==='bossWarning').rank,rank);
   g.elapsed=(wave-1)*WAVE_SECONDS-.005;g.update(.01);

@@ -76,15 +76,15 @@ test('vortex pulls both aquatic and airborne enemies without killing them', () =
   const g=setup(4),larva=enemy(g,650,390,10),adult=enemy(g,650,400,20);g.use('vortex',500,390);advance(g,1);
   assert.ok(Math.hypot(larva.x-500,larva.y-390)<100);assert.ok(Math.hypot(adult.x-500,adult.y-390)<140);assert.equal(g.kills,0);
 });
-test('allies attack nearby prey; ten loaches and ten frogs are allowed', () => {
+test('allies attack nearby prey; two loaches and two frogs are allowed', () => {
   const g=setup(5);g.use('loach',500,390);g.use('frog',500,390);enemy(g,510,390,5);const adult=enemy(g,530,390,20,1);advance(g,1);
   assert.equal(g.kills,1);assert.equal(adult.hp,2);
-  for(let i=0;i<9;i++){g.cooldowns.loach=0;assert.equal(g.use('loach',500,390).ok,true);}
-  assert.equal(g.allies.filter(a=>a.type==='loach').length,10);
-  g.cooldowns.loach=0;const blocked=g.use('loach',500,390);assert.equal(blocked.reason,'limit');assert.equal(blocked.limit,10);
-  for(let i=0;i<9;i++){g.cooldowns.frog=0;assert.equal(g.use('frog',500,390).ok,true);}
-  assert.equal(g.allies.filter(a=>a.type==='frog').length,10);
-  g.cooldowns.frog=0;const blockedFrog=g.use('frog',500,390);assert.equal(blockedFrog.reason,'limit');assert.equal(blockedFrog.limit,10);
+  for(let i=0;i<1;i++){g.cooldowns.loach=0;assert.equal(g.use('loach',500,390).ok,true);}
+  assert.equal(g.allies.filter(a=>a.type==='loach').length,2);
+  g.cooldowns.loach=0;const blocked=g.use('loach',500,390);assert.equal(blocked.reason,'limit');assert.equal(blocked.limit,2);
+  for(let i=0;i<1;i++){g.cooldowns.frog=0;assert.equal(g.use('frog',500,390).ok,true);}
+  assert.equal(g.allies.filter(a=>a.type==='frog').length,2);
+  g.cooldowns.frog=0;const blockedFrog=g.use('frog',500,390);assert.equal(blockedFrog.reason,'limit');assert.equal(blockedFrog.limit,2);
 });
 test('dragon crosses the entire field at the targeted height', () => {
   const g=setup(8);enemy(g,100,390,20,3);enemy(g,900,390,20,3);enemy(g,500,180,20,3);
@@ -131,9 +131,9 @@ test('pause freezes progress, and restart resets unlocks and fields', () => {
 test('deployments outside water are clamped into the pond', () => {
   const g=setup();g.use('loach',-500,-500);const a=g.allies[0];assert.deepEqual({x:a.x,y:a.y},pondPoint(-500,-500));
 });
-test('spawn cap bounds work and all evolution types have increasing threat', () => {
+test('spawn cap bounds work and all evolution types have increasing health and nondecreasing threat', () => {
   const g=setup();for(let i=0;i<300;i++)g.spawn();assert.equal(g.enemies.length,240);
-  for(let i=1;i<EVOLUTIONS.length;i++)assert.ok(EVOLUTIONS[i].hp>EVOLUTIONS[i-1].hp&&EVOLUTIONS[i].threat>EVOLUTIONS[i-1].threat);
+  for(let i=1;i<EVOLUTIONS.length;i++)assert.ok(EVOLUTIONS[i].hp>EVOLUTIONS[i-1].hp&&EVOLUTIONS[i].threat>=EVOLUTIONS[i-1].threat);
 });
 
 test('electric starts farther away and jumps across a wider gap', () => {
@@ -178,14 +178,14 @@ test('larvae reflect away from the bank instead of repeatedly rotating', () => {
     assert.ok(Math.abs(e.angle-heading)<.001);assert.ok(Math.hypot((e.x-500)/440,(e.y-390)/263)<.95);
   }
 });
-test('ten loaches separate even when placed at the identical point', () => {
-  const g=setup();for(let i=0;i<10;i++){g.cooldowns.loach=0;g.use('loach',500,390);}
+test('two loaches separate even when placed at the identical point', () => {
+  const g=setup();for(let i=0;i<2;i++){g.cooldowns.loach=0;g.use('loach',500,390);}
   advance(g,1);
   for(let i=0;i<g.allies.length;i++)for(let j=i+1;j<g.allies.length;j++)assert.ok(Math.hypot(g.allies[i].x-g.allies[j].x,g.allies[i].y-g.allies[j].y)>24);
 });
 test('loaches split available prey and retain different targets across updates', () => {
-  const g=setup();for(let i=0;i<3;i++){g.cooldowns.loach=0;g.use('loach',500,390);}
+  const g=setup();for(let i=0;i<2;i++){g.cooldowns.loach=0;g.use('loach',500,390);}
   for(let i=0;i<3;i++)enemy(g,720+i*12,390+i*12,8);
-  g.update(.1);const targets=g.allies.map(a=>a.targetId);assert.equal(new Set(targets).size,3);assert.ok(targets.every(Boolean));
+  g.update(.1);const targets=g.allies.map(a=>a.targetId);assert.equal(new Set(targets).size,2);assert.ok(targets.every(Boolean));
   g.update(.1);assert.deepEqual(g.allies.map(a=>a.targetId),targets);
 });
