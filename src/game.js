@@ -2,7 +2,6 @@ import { PondAudio } from './audio.js';
 import { drawSkillEvolution, drawEvolvedFlame, drawEvolvedBolt, drawPalmEchoes } from './skill-effects.js';
 import { SKILL_FORMS } from './upgrades.js';
 import { bindPondPointer } from './pointer.js';
-import { smartTarget } from './auto-aim.js';
 import { dailyChallenge, seededRandom, saveDailyRecord } from './daily.js';
 import { setupAchievements } from './achievements.js';
 import { setupProgression } from './progression-ui.js';
@@ -17,7 +16,6 @@ const game = new PondGame();
 let width = 0, height = 0, sx = 1, sy = 1, unit = 1, dpr = 1;
 let selected = 'net', lastTime = 0, visualTime = 0, pointer = { x: 500, y: 390, down: false, inside: false };
 let pondInput;
-let autoFlame=false,autoAimTimer=0,autoAimPoint=null,aimMarker=null;
 let effects = [], particles = [], floating = [], shake = 0, toastTimer = 0, announcementTimer = 0, flash = 0, flashColor = '255,230,150';
 const sound = new PondAudio();
 let helpPaused = false, best = { score: 0, level: 1, kills: 0 };
@@ -52,13 +50,12 @@ for (const [index, w] of WEAPONS.entries()) {
   $('weapon-grid').append(button);
   const quick = button.cloneNode(true);
   quick.classList.add('quick-weapon');
-  quick.setAttribute('aria-label', `즉시 사용 · ${w.name}`);
-  quick.addEventListener('click', () => quickCast(w.id));
+  quick.setAttribute('aria-label', `빠른 선택 · ${w.name}`);
+  quick.addEventListener('click', () => selectWeapon(w.id));
   $('quick-weapons').append(quick);
 }
 const weaponButtons = [...document.querySelectorAll('.weapon-btn')];
 function selectWeapon(id) {
-  autoFlame=false;autoAimPoint=null;
   selected = id; pointer.down = false; pondInput?.cancel();
   const weapon = WEAPONS.find(w => w.id === id);
   for (const button of weaponButtons) { const active = button.dataset.weapon === id; button.classList.toggle('selected', active); button.setAttribute('aria-pressed', String(active)); }
@@ -71,21 +68,6 @@ function selectWeapon(id) {
   if(pondInput) updateHUD();
 }
 selectWeapon('net');
-
-function quickCast(id){
-  if(document.querySelector('dialog[open]'))return;
-  if(game.status!=='playing'){selectWeapon(id);return;}
-  if(!game.isUnlocked(id)){toast(`WAVE ${WEAPONS.find(w=>w.id===id).unlock}에서 해금됩니다.`);return;}
-  if(id==='flame'&&autoFlame){autoFlame=false;toast('자동 화염 분사 중지');updateHUD();return;}
-  selectWeapon(id);
-  if(id==='flame'&&!game.overheated){autoFlame=true;autoAimTimer=0;toast('자동 화염 분사 · 다시 누르면 중지');updateHUD();return;}
-  const target=smartTarget(game,id);
-  if(!target){toast('공격할 적이 없어요. 재사용 시간은 소모되지 않습니다.');return;}
-  Object.assign(pointer,target,{inside:true});
-  const result=useWeapon(true);
-  if(result.ok)aimMarker={...target,life:.7};
-  processEvents();updateHUD();
-}
 
 function tone(...args) { sound.tone(...args); }
 function updateSoundButton() {
@@ -101,7 +83,7 @@ function toast(message) { $('toast').textContent = message; $('toast').classList
 function startGame() {
   sound.stop(); sound.step = 0; sound.unlock(); updateSoundButton();
   if(runMode==='daily') {challenge=dailyChallenge();game.random=seededRandom(challenge.seed);} else {challenge=null;game.random=Math.random;}
-  game.start();aimMarker=null; effects = []; particles = []; floating = []; shake = 0; pointer.down = false; announcementTimer = 0; flash = 0;
+  game.start(); effects = []; particles = []; floating = []; shake = 0; pointer.down = false; announcementTimer = 0; flash = 0;
   if(challenge) game.upgrades[challenge.upgrade]=1;
   $('run-mode').textContent=challenge?'오늘의 연못':'끝나지 않는 밤';
   $('wave-announcement').classList.remove('visible');
@@ -113,7 +95,7 @@ function startGame() {
 }
 function pauseGame() {
   if (game.status !== 'playing') return;
-  autoFlame=false;sound.stop(); game.status = 'paused'; pointer.down = false; pondInput?.cancel(); $('pause-overlay').classList.remove('hidden');
+  sound.stop(); game.status = 'paused'; pointer.down = false; pondInput?.cancel(); $('pause-overlay').classList.remove('hidden');
   $('pause-btn').textContent = '▷'; $('pause-btn').setAttribute('aria-label', '계속하기'); $('resume-btn').focus({ preventScroll: true });
 }
 function resumeGame() {
@@ -143,7 +125,7 @@ document.addEventListener('keydown', e => {
   if (keyWeapon) { selectWeapon(keyWeapon.id); e.preventDefault(); }
   if ((e.key.toLowerCase() === 'p' || e.key === 'Escape') && ['playing', 'paused'].includes(game.status)) { e.preventDefault(); game.status === 'playing' ? pauseGame() : resumeGame(); }
 });
-pondInput = bindPondPointer(canvas, pointer, {canAttack:()=>game.status==='playing',attack:()=>{autoFlame=false;useWeapon(true);}});
+pondInput = bindPondPointer(canvas, pointer, {canAttack:()=>game.status==='playing',attack:()=>useWeapon(true)});
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 // Keep a held attack from becoming a page pan on mobile browsers. Scope the
 // non-passive listener to the pond so the arsenal and dialogs still scroll.
@@ -158,10 +140,8 @@ function useWeapon(explicit = false, dt = 0) {
     else if (result.reason === 'limit') toast(`이미 ${result.limit}마리가 연못을 지키고 있어요!`);
     else if (result.reason === 'locked') toast(`아직 잠겨 있어요. WAVE ${result.unlock}에서 해금됩니다.`);
   }
-  return result;
 }
 function endGame() {
-  autoFlame=false;
   sound.stop();
   medals.check();
   pointer.down = false; $('pause-btn').disabled = true;
@@ -232,8 +212,6 @@ function updateHUD() {
   const allyCount = ALLY_LIMITS[selected] ? game.allies.filter(a => a.type === selected).length : 0;
   $('detail-status').textContent = !game.isUnlocked(selected) ? `WAVE ${w.unlock} 해금` : ALLY_LIMITS[selected] ? `${allyCount}/${ALLY_LIMITS[selected]}마리 · ${allyCount >= ALLY_LIMITS[selected] ? '배치 완료' : cd > 0 ? `${Math.ceil(cd)}초` : '배치 가능'}` : selected === 'flame' ? `${game.overheated ? '냉각 중' : '열기'} ${Math.round(game.heat)}%` : cd > 0 ? `${cd.toFixed(1)}초 후 준비` : '사용 준비 완료';
   $('quick-status').textContent = $('detail-status').textContent;
-  if($('detail-status').textContent==='사용 준비 완료')$('quick-status').textContent='누르면 자동 조준·발동';
-  if(autoFlame){$('quick-status').textContent='자동 분사 중 · 다시 누르면 중지';$('weapon-hint').textContent='자동 추적 분사 · 화염 버튼을 다시 누르면 중지';}
   const mastery=game.skillRank(selected);
   $('quick-name').textContent=`${w.name}${mastery?` · LV ${mastery}`:''}`;
   if(mastery){
@@ -246,7 +224,6 @@ function updateHUD() {
   $('heat-bar').style.width=`${game.heat}%`;
   for (const button of weaponButtons) {
     const id = button.dataset.weapon, cooldown = game.cooldowns[id], spec = WEAPONS.find(w => w.id === id);
-    button.classList.toggle('auto-firing',id==='flame'&&autoFlame);
     const locked = !game.isUnlocked(id); button.classList.toggle('locked', locked); button.setAttribute('aria-disabled', String(locked));
     const rank=game.skillRank(id),badge=button.querySelector('.skill-rank');badge.hidden=!rank;badge.textContent=`+${rank}`;button.dataset.mastery=rank;
     const label = button.querySelector('.cooldown-label');
@@ -625,7 +602,6 @@ function render(time) {
   for (const a of game.allies) drawAlly(a, time);
   for (const e of game.enemies) if (stageOf(e) === 'adult') drawEnemy(e, enemyTime);
   drawEffects();
-  if(aimMarker?.life>0){ctx.save();ctx.globalAlpha=Math.min(1,aimMarker.life*3);ctx.strokeStyle='#efffc0';ctx.lineWidth=2;const ax=aimMarker.x*sx,ay=aimMarker.y*sy;ellipse(ctx,ax,ay,18*unit,18*unit);ctx.stroke();ctx.beginPath();ctx.moveTo(ax-25*unit,ay);ctx.lineTo(ax-12*unit,ay);ctx.moveTo(ax+12*unit,ay);ctx.lineTo(ax+25*unit,ay);ctx.moveTo(ax,ay-25*unit);ctx.lineTo(ax,ay-12*unit);ctx.moveTo(ax,ay+12*unit);ctx.lineTo(ax,ay+25*unit);ctx.stroke();ctx.restore();}
   for (const p of particles) { ctx.globalAlpha = Math.min(1, p.life / .35); ellipse(ctx, p.x * sx, p.y * sy, p.size * unit, p.size * unit, p.color); }
   ctx.globalAlpha = 1;
   for (const f of floating) { ctx.save(); ctx.globalAlpha = Math.min(1, f.life * 2); ctx.fillStyle = f.color; ctx.font = `700 ${Math.max(12, 15 * unit)}px 'Noto Sans KR',sans-serif`; ctx.textAlign = 'center'; ctx.shadowColor = '#12382c'; ctx.shadowBlur = 5; ctx.fillText(f.text, f.x * sx, f.y * sy); ctx.restore(); }
@@ -655,19 +631,12 @@ function frame(now) {
   if (game.status !== 'paused') visualTime += dt;
   if (game.status === 'playing') {
     game.update(dt);
-    if(autoFlame&&game.status==='playing'){
-      if(!game.enemies.length){autoAimPoint=null;autoAimTimer=0;}
-      autoAimTimer-=dt;
-      if(autoAimTimer<=0){autoAimPoint=smartTarget(game,'flame',autoAimPoint);autoAimTimer=.18;}
-      if(autoAimPoint){Object.assign(pointer,autoAimPoint,{inside:true});const result=useWeapon(false,dt);if(!result.ok||game.overheated){autoFlame=false;toast('자동 분사 종료 · 과열 냉각 중');}}
-    }
     if (pointer.down && ['net', 'flame'].includes(selected)) useWeapon(false, dt);
     processEvents();
     if(game.status === 'playing') sound.update(game.level, game.danger);
     hudTick += dt; if (hudTick > .075 || game.status !== 'playing') { medals.check(); updateHUD(); hudTick = 0; }
   }
   if (game.status !== 'paused') {
-    if(aimMarker)aimMarker.life-=dt;
     for (const p of particles) { p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= Math.exp(-dt * 2); p.vy += 15 * dt; }
     particles = particles.filter(p => p.life > 0);
     for (const e of effects) e.life -= dt; effects = effects.filter(e => e.life > 0);
