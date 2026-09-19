@@ -23,9 +23,9 @@ export const EVOLUTIONS = [
 export const WEAPONS = [
   { id: 'net', key: '1', unlock: 1, name: '대왕 뜰채', icon: 'net', tag: '기본 공격 · 물속 + 공중', cooldown: .48, radius: 56, damage: 1, description: '물속은 한 번에, 일반 성충은 두 번! 드래그로 연속 공격해요.', hint: '클릭 / 드래그 · 기본 피해 1, 성충도 공격 가능' },
   { id: 'loach', key: '2', unlock: 1, name: '미꾸라지', icon: 'fish', tag: '자동 사냥 · 물속', cooldown: 17, radius: 35, damage: 1, description: '물속을 자동 사냥해요. 최대 10마리. 진화 유충은 여러 번 공격해야 해요.', hint: '클릭 · 물속 자동 방어 (최대 10마리)' },
-  { id: 'electric', key: '3', unlock: 2, name: '전기 방전봉', icon: 'bolt', tag: '광역 연쇄 · 피해 3', cooldown: 5, radius: 165, chainRadius: 145, damage: 3, description: '넓은 범위에서 최대 16마리를 감전시켜요. 멀리 떨어진 적에게도 번개가 이어집니다.', hint: '클릭 · 넓어진 범위와 길어진 연쇄 번개' },
+  { id: 'electric', key: '3', unlock: 2, name: '전기 방전봉', icon: 'bolt', tag: '광역 연쇄 · 피해 3', cooldown: 5, radius: 165, chainRadius: 145, damage: 3, description: '최대 16마리에게 연쇄 번개! 소용돌이 안의 적에게 피해가 25% 증가해요.', hint: '클릭 · 연쇄 번개 / 소용돌이 안에서 피해 +25%' },
   { id: 'flame', key: '4', unlock: 3, name: '화염 방사기', icon: 'flamethrower', tag: '지속 화염 · 초당 피해 16', cooldown: .12, radius: 155, damage: 1, dps: 16, heatPerSecond: 25, description: '연못을 누르고 있으면 범위 안 성충에게 초당 피해 16! 약 4초 연속 분사하며, 드래그로 조준할 수 있어요.', hint: '연못을 누른 채 유지 / 드래그 · 초당 피해 16 · 과열 시 잠시 냉각' },
-  { id: 'vortex', key: '5', unlock: 4, name: '소용돌이', icon: 'vortex', tag: '제어 · 물속 + 공중', cooldown: 13, radius: 205, description: '5초 동안 모든 적을 끌어모아요. 거대한 괴물은 흡입에 저항해요.', hint: '클릭 · 모아둔 괴물에게 범위 공격을 연결하세요' },
+  { id: 'vortex', key: '5', unlock: 4, name: '소용돌이', icon: 'vortex', tag: '제어 · 감전 조합', cooldown: 13, radius: 205, description: '5초 동안 적을 끌어모아요. 범위 안의 적에게 전기 방전봉·천뢰난무 피해 +25%!', hint: '클릭 · 소용돌이 → 전기 공격으로 추가 피해' },
   { id: 'frog', key: '6', unlock: 5, name: '개구리 특공대', icon: 'frog', tag: '고속 자동 사냥 · 공중 피해 3', cooldown: 20, radius: 35, damage: 3, description: '1.3초마다 빠르게 혀를 뻗어 공격해요. 최대 10마리로 공중을 지켜주세요.', hint: '클릭 · 1.3초마다 공격하는 지원군 (최대 10마리)' },
   { id: 'freeze', key: '7', unlock: 6, name: '절대 영도', icon: 'snow', tag: '빙결 · 후속 피해 증가', cooldown: 15, radius: 180, description: '성장과 이동을 5초간 정지. 얼어붙은 적은 피해를 1.5배 받아요.', hint: '클릭 · 얼린 뒤 강한 공격으로 산산조각!' },
   { id: 'palm', key: '8', unlock: 7, name: '여래신장', icon: 'palm', tag: '궁극기 · 피해 18', cooldown: 27, radius: 255, damage: 18, description: '황금 손바닥으로 강타! 여왕은 살아남을 수 있어요. 빙결과 조합하세요.', hint: '클릭 · 황금 손바닥, 넓은 범위에 피해 18' },
@@ -80,6 +80,7 @@ export class PondGame {
     this.spawnTimer = .7; this.nextId = 1; this.heat = 0; this.overheated = false; this.flameUntil = 0;
     this.upgrades = {}; this.upgradeOffer = []; this.upgradeWave = 0; this.wardSpent = false;
     this.streak = 0; this.bestStreak = 0; this.streakUntil = 0; this.streakRewards = 0; this.bossWarningWave = 0;
+    this.comboFeedback = {};
     for (let i = 0; i < 22; i++) this.spawn(this.random() * 15);
   }
   start() { this.reset(); this.status = 'playing'; }
@@ -108,12 +109,19 @@ export class PondGame {
   drainEvents() { return this.events.splice(0); }
   damage(targets, amount, source, x, y) {
     if (!targets.length) return 0;
-    const dead = [], alive = [];
+    const dead = [], alive = [], combos = new Map();
     for (const e of targets) {
+      const conductive = ['electric','thunderstorm'].includes(source) && this.fields.some(f=>f.type==='vortex' && f.remaining>0 && distance(e,f)<=f.radius);
       const base=amount+(source==='net'?(this.upgrades.netcraft || 0):0);
-      const hit=base*(1+(this.upgrades.power || 0)*.12)*(e.frozen>0?1.5+(this.upgrades.icecraft || 0)*.15:1)*(e.rank>=3&&stageOf(e)==='adult'?1+(this.upgrades.hunter || 0)*.25:1);
+      const hit=base*(1+(this.upgrades.power || 0)*.12)*(e.frozen>0?1.5+(this.upgrades.icecraft || 0)*.15:1)*(e.rank>=3&&stageOf(e)==='adult'?1+(this.upgrades.hunter || 0)*.25:1)*(conductive?1.25:1);
+      if(conductive) combos.set('conductive',e);
+      if(e.frozen>0) combos.set('frozen',e);
       e.hp -= hit; e.hit = .15;
       if (e.hp <= 0) dead.push(e); else alive.push({ x: e.x, y: e.y, amount: hit, rank: e.rank });
+    }
+    for(const [kind,e] of combos) if(this.elapsed >= (this.comboFeedback[kind] ?? -Infinity)) {
+      this.comboFeedback[kind]=this.elapsed+.9;
+      this.emit('combo',{kind,x:e.x,y:e.y,multiplier:kind==='conductive'?1.25:1.5+(this.upgrades.icecraft||0)*.15});
     }
     if (alive.length) this.emit('damage', { targets: alive, source });
     if (!dead.length) return 0;

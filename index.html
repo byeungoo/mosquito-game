@@ -40,7 +40,7 @@
     <section class="game-layout" aria-label="연못 방어 게임">
       <div class="arena" id="arena">
         <canvas id="game-canvas" tabindex="0" aria-label="연못 전장. 클릭 또는 드래그로 공격. 숫자, 빼기, Q W E R로 무기 선택. P로 일시정지."></canvas>
-        <div class="arena-top"><span class="location-chip"><span class="status-dot"></span> 끝나지 않는 밤 <span id="stage-label">WAVE 01 · 잠복</span></span><button id="pause-btn" class="pause-btn" disabled aria-label="일시정지">Ⅱ</button></div>
+        <div class="arena-top"><span class="location-chip"><span class="status-dot"></span> <span id="run-mode">끝나지 않는 밤</span> <span id="stage-label">WAVE 01 · 잠복</span></span><button id="pause-btn" class="pause-btn" disabled aria-label="일시정지">Ⅱ</button></div>
         <div class="hud">
           <div class="timer-stat"><span>생존 시간</span><strong id="time-value">00:00</strong></div>
           <div class="danger-stat"><div class="danger-label"><span>변이 위험도</span><strong><b id="adult-value">0</b> <em>/ 30</em></strong></div><div class="danger-track"><div id="danger-bar"></div></div><span id="danger-caption">위험도 30 이상이면 연못 붕괴</span></div>
@@ -51,6 +51,7 @@
         <div id="boss-hud" class="boss-hud hidden"><span>♛ 재앙의 여왕</span><div><i id="boss-health"></i></div><b id="boss-hp-text"></b></div>
         <div id="toast" class="toast" role="status" aria-live="polite"></div>
         <div id="streak-hud" class="streak-hud hidden"><b id="streak-value">0 CHAIN</b><span>4초 안에 이어 잡기</span><div><i id="streak-bar"></i></div></div>
+        <div id="heat-hud" class="heat-hud hidden"><span id="heat-label"></span><div><i id="heat-bar"></i></div></div>
         <div class="arena-bottom"><span id="weapon-hint">도구를 골라 연못을 지켜주세요</span><span class="weather" id="score-label">SCORE 0000</span></div>
 
         <div class="overlay" id="start-overlay">
@@ -60,32 +61,50 @@
             <h2>모기는 진화한다.<br><span>끝까지 살아남아라.</span></h2>
             <p>흡혈종, 철갑종, 그리고 재앙의 여왕.<br>단계를 돌파하고 <strong>15가지 장비</strong>를 해금하세요.</p>
             <button class="primary-btn" id="start-btn">무한 생존 시작 <span>↗</span></button>
+            <button class="daily-start-btn" id="daily-start-btn">오늘의 연못 도전 <span>✦</span></button>
+            <p id="daily-description" class="daily-description"></p><span id="daily-record" class="daily-record"></span>
             <div class="start-meta"><span>22초마다 더 강한 변이</span><span>처음엔 장비 2개로 시작</span></div>
             <span class="best-note" id="start-best">오늘의 평화는 당신에게 달렸어요.</span>
           </div>
         </div>
 
         <div class="overlay hidden" id="pause-overlay"><div class="dialog-card"><span class="eyebrow">TAKE A BREATHER</span><h2>잠깐, 숨 고르기</h2><p>연못도 함께 쉬고 있어요.</p><button id="resume-btn" class="primary-btn">계속 지키기 <span>→</span></button><button id="restart-pause-btn" class="text-btn">처음부터 다시</button></div></div>
-        <div class="overlay hidden" id="result-overlay"><div class="dialog-card"><span class="eyebrow" id="result-eyebrow">THE POND HAS FALLEN</span><h2 id="result-title">연못이 무너졌습니다</h2><p id="result-description"></p><div class="result-score" id="result-score">0</div><span class="eyebrow">FINAL SCORE</span><div class="result-stats"><div><span>도달 단계</span><strong id="result-level">1</strong></div><div><span>퇴치 수</span><strong id="result-kills">0</strong></div><div><span>생존 시간</span><strong id="result-time">0:00</strong></div></div><p id="result-best" class="record-note"></p><button id="restart-btn" class="primary-btn">더 멀리 도전하기 <span>↻</span></button></div></div>
+        <div class="overlay hidden" id="result-overlay"><div class="dialog-card"><span class="eyebrow" id="result-eyebrow">THE POND HAS FALLEN</span><h2 id="result-title">연못이 무너졌습니다</h2><p id="result-description"></p><div class="result-score" id="result-score">0</div><span class="eyebrow">FINAL SCORE</span><div class="result-stats"><div><span>도달 단계</span><strong id="result-level">1</strong></div><div><span>퇴치 수</span><strong id="result-kills">0</strong></div><div><span>생존 시간</span><strong id="result-time">0:00</strong></div></div><p id="result-best" class="record-note"></p><button id="restart-btn" class="primary-btn">더 멀리 도전하기 <span>↻</span></button><button id="result-share-btn" class="text-btn">&#44592;&#47197; &#44277;&#50976; &#8599;</button><button id="mode-menu-btn" class="text-btn">&#47784;&#46300; &#49440;&#53469;</button></div></div>
       </div>
 
+      <nav class="quick-arsenal" aria-label="모바일 빠른 무기 선택"><div class="quick-heading"><strong id="quick-name">대왕 뜰채</strong><span id="quick-status">사용 준비 완료</span></div><div id="quick-weapons" class="quick-weapons"></div><small>좌우로 밀어 해금된 장비를 선택하세요</small></nav>
       <aside class="arsenal">
         <div class="arsenal-heading"><div><span class="eyebrow">EVOLVING ARSENAL</span><h2>금지된 방어 장비</h2></div><span class="weapon-count" id="unlock-count">02<span>/15</span></span></div>
         <div class="weapon-grid" id="weapon-grid" role="group" aria-label="무기 선택"></div>
         <div class="weapon-detail" id="weapon-detail"><span class="detail-tag" id="detail-tag">기본 장비 · 물속</span><h3 id="detail-name">대왕 뜰채</h3><p id="detail-description">클릭하거나 드래그해 유충을 한 번에 걷어내세요.</p><div class="detail-footer"><span id="detail-cooldown">재사용 0.35초</span><span id="detail-status">사용 준비 완료</span></div></div>
         <section class="run-build" aria-label="이번 판 강화"><div><span class="eyebrow">MY SURVIVAL BUILD</span><button id="upgrade-open" type="button" hidden>강화 선택 ↗</button></div><p id="build-empty">W2부터 3단계마다 나만의 강화를 선택하세요.</p><div id="run-upgrades"></div></section>
+        <button id="medals-btn" class="guide-btn">수비대 훈장 ↗</button>
         <div class="field-note"><span>MUTATION INDEX <span>↙</span></span><button id="guide-btn" class="guide-btn">괴물 도감 · 8종 ↗</button><div class="mutation-legend"><span>● 일반</span><span>● 흡혈</span><span>● 철갑</span><span>● 사신</span><span>♛ 여왕</span></div><p id="field-note">성충을 오래 놔두면 괴물이 됩니다.<br>뜰채로 성충도 잡을 수 있어요.</p></div>
       </aside>
     </section>
     <footer class="footer"><span><i></i> 연못의 평화를 위한 조금 과격한 방법</span><span>설치 없이 플레이 · PC & 모바일 <span class="footer-flower">✳</span></span></footer>
   </main>
 
-  <dialog id="help-dialog"><button id="close-help-btn" class="close-btn" aria-label="도움말 닫기">×</button><span class="eyebrow">ENDLESS SURVIVAL GUIDE</span><h2>모기를 괴물로 키우지 마세요.</h2><p>제한 시간 없는 무한 생존입니다. <b>22초마다 단계가 오르고</b> 적이 강해지며 새로운 무기가 해금됩니다. 위험도 30 이상에서 붕괴 게이지가 5초간 쌓이면 패배합니다. 적을 줄이면 게이지가 서서히 회복돼요.</p><ol><li><b>일반 → 흡혈종 → 철갑종 → 사신종 → 여왕.</b> 성충은 15초마다 진화합니다. 받은 피해 비율은 유지되며 여왕은 8단계부터 나타납니다.</li><li>위험도는 일반 1, 흡혈 2, 철갑 3, 사신 5, 여왕 10. 사신과 여왕은 새 유충도 낳습니다.</li><li><b>뜰채는 성충도 공격</b>할 수 있어요. 미꾸라지와 개구리는 각각 최대 10마리. 괴물에게는 여러 번 공격해야 합니다.</li><li>무기 버튼 또는 <b>1–9, 0, -, Q, W, E, R</b> 키로 선택. 잠긴 장비에 해금 단계가 표시됩니다.</li><li>절대 영도에 얼린 적은 피해를 <b>1.5배</b> 받습니다. 여왕의 빙결은 더 빨리 풀립니다.</li><li><b>Q 두꺼비 합창</b>은 반복 충격파, <b>W 시간 되감기</b>는 성장·진화 퇴행, <b>E 연쇄 부적</b>은 처치 시 주변으로 번지는 폭발입니다.</li><li><b>W2, W5, W8…</b>에서 세 가지 중 하나의 강화를 선택하세요. 선택 중에는 시간이 멈추며 강화는 이번 판 동안 유지됩니다.</li><li><b>4초 안에 이어 처치</b>하면 CHAIN이 쌓입니다. 12·24·36연속 처치마다 점수 +15, 공격 스킬 대기시간 1초 회복! 지원군 소환은 제외됩니다.</li><li><b>P / Esc</b>로 일시정지. 탭을 떠나면 자동 정지됩니다.</li></ol><p class="help-note">게임 속 생물·무기 효과는 재미를 위한 상상입니다. 게임 시작 시 배경음과 효과음이 재생됩니다. 상단 ♪ 버튼으로 끄거나 켤 수 있어요.</p><button id="help-ok-btn" class="primary-btn">준비됐어요 <span>✓</span></button></dialog>
+  <dialog id="help-dialog"><button id="close-help-btn" class="close-btn" aria-label="도움말 닫기">×</button><span class="eyebrow">ENDLESS SURVIVAL GUIDE</span><h2>모기를 괴물로 키우지 마세요.</h2><p>제한 시간 없는 무한 생존입니다. <b>22초마다 단계가 오르고</b> 적이 강해지며 새로운 무기가 해금됩니다. 위험도 30 이상에서 붕괴 게이지가 5초간 쌓이면 패배합니다. 적을 줄이면 게이지가 서서히 회복돼요.</p><ol>
+<li><b>일반 → 흡혈종 → 철갑종 → 사신종 → 여왕.</b> 성충은 15초마다 진화합니다. 받은 피해 비율은 유지되며 여왕은 8단계부터 나타납니다.</li>
+<li>위험도는 일반 1, 흡혈 2, 철갑 3, 사신 5, 여왕 10. 사신과 여왕은 새 유충도 낳습니다.</li>
+<li><b>뜰채는 성충도 공격</b>할 수 있어요. 미꾸라지와 개구리는 각각 최대 10마리. 괴물에게는 여러 번 공격해야 합니다.</li>
+<li>무기 버튼 또는 <b>1–9, 0, -, Q, W, E, R</b> 키로 선택. 잠긴 장비에 해금 단계가 표시됩니다.</li>
+<li>절대 영도에 얼린 적은 피해를 <b>1.5배</b> 받습니다. 여왕의 빙결은 더 빨리 풀립니다.</li>
+<li><b>Q 두꺼비 합창</b>은 반복 충격파, <b>W 시간 되감기</b>는 성장·진화 퇴행, <b>E 연쇄 부적</b>은 처치 시 주변으로 번지는 폭발입니다.</li>
+<li><b>W2, W5, W8…</b>에서 세 가지 중 하나의 강화를 선택하세요. 선택 중에는 시간이 멈추며 강화는 이번 판 동안 유지됩니다.</li>
+<li><b>4초 안에 이어 처치</b>하면 CHAIN이 쌓입니다. 12·24·36연속 처치마다 점수 +15, 공격 스킬 대기시간 1초 회복! 지원군 소환은 제외됩니다.</li>
+<li><b>소용돌이 → 전기 방전봉 / 천뢰난무</b>: 소용돌이 범위 안의 적에게 전기 피해가 25% 증가합니다. 빙결 보너스와 함께 적용됩니다.</li>
+<li><b>오늘의 연못</b>은 매일 한국 시간 자정에 시작 강화와 난수 조건이 바뀝니다. 재도전은 같은 조건으로 시작하며, 최고 점수는 이 기기에만 저장됩니다.</li>
+<li><b>수비대 훈장 6종</b>에 도전하세요. 획득 기록은 다음 판에도 남습니다. 결과 화면에서 기록과 게임 링크를 함께 복사할 수 있어요.</li>
+<li>모바일에서는 전장 바로 아래 <b>빠른 선택줄</b>을 좌우로 밀어 해금된 무기를 고르세요. 화염 방사기는 열기 막대로 과열을 확인할 수 있습니다.</li>
+<li><b>P / Esc</b>로 일시정지. 탭을 떠나면 자동 정지됩니다.</li></ol><p class="help-note">게임 속 생물·무기 효과는 재미를 위한 상상입니다. 게임 시작 시 배경음과 효과음이 재생됩니다. 상단 ♪ 버튼으로 끄거나 켤 수 있어요.</p><button id="help-ok-btn" class="primary-btn">준비됐어요 <span>✓</span></button></dialog>
   <dialog id="share-dialog" aria-labelledby="share-title">
     <button id="close-share-btn" class="close-btn" aria-label="닫기">×</button>
     <span class="eyebrow">INVITE YOUR FRIENDS</span><h2 id="share-title">함께 연못을 지켜요</h2>
     <p id="share-notice"></p><label for="share-url">게임 링크</label>
     <input id="share-url" type="url" readonly spellcheck="false">
+    <textarea id="share-record" readonly hidden aria-label="공유할 도전 기록" rows="6"></textarea><button id="copy-record-btn" class="primary-btn" hidden>기록과 링크 함께 복사 ↗</button>
     <button id="copy-link-btn" class="primary-btn">링크 복사 <span>↗</span></button>
     <button id="native-share-btn" class="text-btn" hidden>다른 앱으로 공유</button>
     <p id="share-status" role="status" aria-live="polite"></p>
@@ -101,6 +120,7 @@
     <p id="upgrade-wave"></p><div id="upgrade-options"></div>
     <div class="upgrade-footer"><span>선택하는 동안 연못은 안전하게 멈춥니다.</span><button id="upgrade-later" class="text-btn">나중에 선택</button></div>
   </dialog>
+  <dialog id="medals-dialog" aria-labelledby="medals-title"><button id="close-medals-btn" class="close-btn" aria-label="훈장 닫기">×</button><span class="eyebrow">POND DEFENSE HONORS</span><h2 id="medals-title">당신이 지킨 밤의 기록.</h2><p>새로운 목표에 도전해 훈장 6개를 모으세요. 획득 기록은 이 기기에 저장됩니다.</p><div id="medals-list"></div></dialog>
   <script type="module" src="./src/game.js"></script>
 </body>
 </html>

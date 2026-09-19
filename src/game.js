@@ -1,4 +1,7 @@
 import { PondAudio } from './audio.js';
+import { bindPondPointer } from './pointer.js';
+import { dailyChallenge, seededRandom, saveDailyRecord } from './daily.js';
+import { setupAchievements } from './achievements.js';
 import { setupProgression } from './progression-ui.js';
 import { drawDragonKing, drawThunderstorm } from './spectacle.js';
 import { SPECIES, speciesOf, drawMonster } from './monsters.js';
@@ -10,9 +13,18 @@ const canvas = $('game-canvas'), ctx = canvas.getContext('2d');
 const game = new PondGame();
 let width = 0, height = 0, sx = 1, sy = 1, unit = 1, dpr = 1;
 let selected = 'net', lastTime = 0, visualTime = 0, pointer = { x: 500, y: 390, down: false, inside: false };
+let pondInput;
 let effects = [], particles = [], floating = [], shake = 0, toastTimer = 0, announcementTimer = 0, flash = 0, flashColor = '255,230,150';
 const sound = new PondAudio();
 let helpPaused = false, best = { score: 0, level: 1, kills: 0 };
+let runMode='endless', challenge=null, dailyRecords={};
+try { dailyRecords=JSON.parse(localStorage.getItem('pond-daily-v1') || '{}') || {}; } catch { /* Storage is optional. */ }
+function refreshDailyCard() {
+  const today=dailyChallenge(),record=dailyRecords[today.date];
+  $('daily-description').textContent=`${today.name} · ${today.description}`;
+  $('daily-record').textContent=Number.isFinite(record?.score)?`오늘 최고 ${record.score}점 · W${record.level}`:'매일 한국 시간 자정 갱신 · 기기별 기록';
+}
+refreshDailyCard();
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 try { const stored = JSON.parse(localStorage.getItem('pond-defense-endless-v2') || 'null'); if (stored && Number.isFinite(stored.score) && Number.isFinite(stored.level)) best = stored; } catch { /* Storage is optional. */ }
 if (best.score) $('start-best').textContent = `최고 점수 ${best.score} · 최고 WAVE ${best.level}`;
@@ -33,17 +45,26 @@ for (const [index, w] of WEAPONS.entries()) {
   button.innerHTML = `<span class="keycap">${w.key.toUpperCase()}</span><svg aria-hidden="true"><use href="#i-${w.icon}"/></svg><span class="weapon-name">${w.name}</span><span class="cooldown-label"></span><span class="cooldown-shade"></span><span class="lock-label">W${String(w.unlock).padStart(2,'0')} 해금</span>`;
   button.addEventListener('click', () => selectWeapon(w.id));
   $('weapon-grid').append(button);
+  const quick = button.cloneNode(true);
+  quick.classList.add('quick-weapon');
+  quick.setAttribute('aria-label', `빠른 선택 · ${w.name}`);
+  quick.addEventListener('click', () => selectWeapon(w.id));
+  $('quick-weapons').append(quick);
 }
 const weaponButtons = [...document.querySelectorAll('.weapon-btn')];
 function selectWeapon(id) {
-  selected = id; pointer.down = false;
+  selected = id; pointer.down = false; pondInput?.cancel();
   const weapon = WEAPONS.find(w => w.id === id);
   for (const button of weaponButtons) { const active = button.dataset.weapon === id; button.classList.toggle('selected', active); button.setAttribute('aria-pressed', String(active)); }
   $('detail-tag').textContent = game.isUnlocked(id) ? weapon.tag : `잠긴 장비 · WAVE ${weapon.unlock} 해금`; $('detail-name').textContent = weapon.name;
   $('detail-description').textContent = weapon.description;
   $('detail-cooldown').textContent = id === 'flame' ? '연속 분사 · 과열 주의' : `재사용 ${weapon.cooldown}초`;
   $('weapon-hint').textContent = game.isUnlocked(id) ? weapon.hint : `아직 잠겨 있어요 · WAVE ${weapon.unlock} 도달 시 해금`;
+  $('quick-name').textContent = weapon.name;
+  const quick = weaponButtons.find(b => b.classList.contains('quick-weapon') && b.dataset.weapon === id);
+  if (quick && !quick.hidden) $('quick-weapons').scrollTo({left:Math.max(0,quick.offsetLeft-100),behavior:reducedMotion?'instant':'smooth'});
   tone(420, .03, 'sine', .025);
+  if(pondInput) updateHUD();
 }
 selectWeapon('net');
 
@@ -60,30 +81,42 @@ updateSoundButton();
 function toast(message) { $('toast').textContent = message; $('toast').classList.add('visible'); toastTimer = 2.4; }
 function startGame() {
   sound.stop(); sound.step = 0; sound.unlock(); updateSoundButton();
+  if(runMode==='daily') {challenge=dailyChallenge();game.random=seededRandom(challenge.seed);} else {challenge=null;game.random=Math.random;}
   game.start(); effects = []; particles = []; floating = []; shake = 0; pointer.down = false; announcementTimer = 0; flash = 0;
+  if(challenge) game.upgrades[challenge.upgrade]=1;
+  $('run-mode').textContent=challenge?'오늘의 연못':'끝나지 않는 밤';
   $('wave-announcement').classList.remove('visible');
   for (const id of ['start-overlay', 'pause-overlay', 'result-overlay']) $(id).classList.add('hidden');
   $('pause-btn').disabled = false; $('pause-btn').textContent = 'Ⅱ'; $('pause-btn').setAttribute('aria-label', '일시정지');
   selectWeapon('net'); $('stage-label').textContent = 'WAVE 01 · 잠복';
-  toast('뜰채는 성충도 공격합니다. 진화하기 전에 잡으세요!');
+  toast(challenge?`${challenge.name} · ${challenge.description}`:'뜰채는 성충도 공격합니다. 진화하기 전에 잡으세요!');
   canvas.focus({ preventScroll: true }); tone(420, .15, 'sine', .04, 840); progression.refresh(); updateHUD();
 }
 function pauseGame() {
   if (game.status !== 'playing') return;
-  sound.stop(); game.status = 'paused'; pointer.down = false; $('pause-overlay').classList.remove('hidden');
+  sound.stop(); game.status = 'paused'; pointer.down = false; pondInput?.cancel(); $('pause-overlay').classList.remove('hidden');
   $('pause-btn').textContent = '▷'; $('pause-btn').setAttribute('aria-label', '계속하기'); $('resume-btn').focus({ preventScroll: true });
 }
 function resumeGame() {
   if (game.status !== 'paused' || document.hidden || document.querySelector('dialog[open]')) return;
   sound.unlock(); game.status = 'playing'; $('pause-overlay').classList.add('hidden'); $('pause-btn').textContent = 'Ⅱ'; $('pause-btn').setAttribute('aria-label', '일시정지'); canvas.focus({ preventScroll: true });
 }
-for (const id of ['start-btn', 'restart-btn', 'restart-pause-btn']) $(id).addEventListener('click', startGame);
+$('start-btn').addEventListener('click',()=>{runMode='endless';startGame();});
+$('daily-start-btn').addEventListener('click',()=>{runMode='daily';startGame();});
+for (const id of ['restart-btn', 'restart-pause-btn']) $(id).addEventListener('click', startGame);
+$('mode-menu-btn').addEventListener('click',()=>{
+  pondInput.cancel();sound.stop();game.reset();effects=[];particles=[];floating=[];
+  $('pause-btn').disabled=true;selectWeapon('net');
+  $('result-overlay').classList.add('hidden');$('start-overlay').classList.remove('hidden');
+  if(best.score)$('start-best').textContent=`최고 점수 ${best.score} · 최고 WAVE ${best.level}`;
+  refreshDailyCard();updateHUD();$('start-btn').focus({preventScroll:true});
+});
 $('pause-btn').addEventListener('click', () => game.status === 'playing' ? pauseGame() : resumeGame());
 $('resume-btn').addEventListener('click', resumeGame);
 $('help-btn').addEventListener('click', () => { helpPaused = game.status === 'playing'; if (helpPaused) pauseGame(); $('help-dialog').showModal(); });
 for (const id of ['close-help-btn', 'help-ok-btn']) $(id).addEventListener('click', () => $('help-dialog').close());
 $('help-dialog').addEventListener('close', () => { if (helpPaused) resumeGame(); helpPaused = false; });
-document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); else if(game.status==='ready')refreshDailyCard(); });
 window.addEventListener('blur', () => { pointer.down = false; if (!document.querySelector('dialog[open]')) pauseGame(); });
 document.addEventListener('keydown', e => {
   if (document.querySelector('dialog[open]') || e.repeat) return;
@@ -91,16 +124,7 @@ document.addEventListener('keydown', e => {
   if (keyWeapon) { selectWeapon(keyWeapon.id); e.preventDefault(); }
   if ((e.key.toLowerCase() === 'p' || e.key === 'Escape') && ['playing', 'paused'].includes(game.status)) { e.preventDefault(); game.status === 'playing' ? pauseGame() : resumeGame(); }
 });
-function setPointer(e) { const rect = canvas.getBoundingClientRect(); pointer.x = (e.clientX - rect.left) / rect.width * 1000; pointer.y = (e.clientY - rect.top) / rect.height * 700; }
-canvas.addEventListener('pointerdown', e => {
-  if (e.button !== 0 || game.status !== 'playing') return;
-  setPointer(e); pointer.down = true; pointer.inside = true; canvas.setPointerCapture(e.pointerId); canvas.focus({ preventScroll: true }); useWeapon(true); e.preventDefault();
-});
-canvas.addEventListener('pointermove', e => { setPointer(e); pointer.inside = true; });
-canvas.addEventListener('pointerup', e => { pointer.down = false; if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId); if (e.pointerType === 'touch') pointer.inside = false; });
-canvas.addEventListener('pointercancel', () => { pointer.down = false; pointer.inside = false; });
-canvas.addEventListener('lostpointercapture', () => { pointer.down = false; });
-canvas.addEventListener('pointerleave', () => { pointer.inside = false; });
+pondInput = bindPondPointer(canvas, pointer, {canAttack:()=>game.status==='playing',attack:()=>useWeapon(true)});
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 // Keep a held attack from becoming a page pan on mobile browsers. Scope the
 // non-passive listener to the pond so the arsenal and dialogs still scroll.
@@ -118,15 +142,24 @@ function useWeapon(explicit = false, dt = 0) {
 }
 function endGame() {
   sound.stop();
+  medals.check();
   pointer.down = false; $('pause-btn').disabled = true;
-  const newBest = game.score > best.score;
-  best.score = Math.max(best.score, game.score); best.level = Math.max(best.level, game.level); best.kills = Math.max(best.kills || 0, game.kills);
-  try { localStorage.setItem('pond-defense-endless-v2', JSON.stringify(best)); } catch { /* Continue without persistence. */ }
+  const previous=challenge?dailyRecords[challenge.date]?.score || 0:best.score;
+  const newBest = game.score > previous;
+  if(challenge) {
+    dailyRecords=saveDailyRecord(dailyRecords,challenge.date,game);
+    try {localStorage.setItem('pond-daily-v1',JSON.stringify(dailyRecords));} catch { /* Optional. */ }
+  } else {
+    best.score = Math.max(best.score, game.score); best.level = Math.max(best.level, game.level); best.kills = Math.max(best.kills || 0, game.kills);
+    try { localStorage.setItem('pond-defense-endless-v2', JSON.stringify(best)); } catch { /* Continue without persistence. */ }
+  }
   $('result-eyebrow').textContent = 'THE POND HAS FALLEN'; $('result-title').textContent = '연못이 무너졌습니다';
   $('result-description').textContent = `최고 ${game.bestStreak}연속 처치 · 여왕 ${game.bossKills}마리 · 강화 ${Object.values(game.upgrades).reduce((a,b)=>a+b,0)}회`;
   $('result-score').textContent = game.score.toLocaleString(); $('result-level').textContent = `W${game.level}`;
   $('result-kills').textContent = game.kills; $('result-time').textContent = formatTime(game.elapsed);
-  $('result-best').textContent = `${newBest ? '✦ 새로운 최고 기록! · ' : ''}최고 ${best.score}점 / WAVE ${best.level}`;
+  const record=challenge?dailyRecords[challenge.date]:best;
+  $('result-best').textContent = `${newBest ? '✦ 새로운 최고 기록! · ' : ''}${challenge?challenge.date+' 오늘의 연못 · ':''}최고 ${record.score}점 / WAVE ${record.level}`;
+  $('restart-btn').firstChild.textContent=challenge?'오늘의 연못 재도전 ':'더 멀리 도전하기 ';
   $('result-overlay').classList.remove('hidden'); $('restart-btn').focus({ preventScroll: true });
   tone(220, .5, 'triangle', .06, 75);
 }
@@ -161,9 +194,15 @@ function updateHUD() {
   }
   const allyCount = ALLY_LIMITS[selected] ? game.allies.filter(a => a.type === selected).length : 0;
   $('detail-status').textContent = !game.isUnlocked(selected) ? `WAVE ${w.unlock} 해금` : ALLY_LIMITS[selected] ? `${allyCount}/${ALLY_LIMITS[selected]}마리 · ${allyCount >= ALLY_LIMITS[selected] ? '배치 완료' : cd > 0 ? `${Math.ceil(cd)}초` : '배치 가능'}` : selected === 'flame' ? `${game.overheated ? '냉각 중' : '열기'} ${Math.round(game.heat)}%` : cd > 0 ? `${cd.toFixed(1)}초 후 준비` : '사용 준비 완료';
+  $('quick-status').textContent = $('detail-status').textContent;
+  $('heat-hud').classList.toggle('hidden',selected!=='flame' || !['playing','paused'].includes(game.status));
+  $('heat-hud').classList.toggle('overheated',game.overheated);
+  $('heat-label').textContent = game.overheated?'과열 · 25%까지 냉각 중':`화염 연료 열기 ${Math.round(game.heat)}%`;
+  $('heat-bar').style.width=`${game.heat}%`;
   for (const button of weaponButtons) {
     const id = button.dataset.weapon, cooldown = game.cooldowns[id], spec = WEAPONS.find(w => w.id === id);
     const locked = !game.isUnlocked(id); button.classList.toggle('locked', locked); button.setAttribute('aria-disabled', String(locked));
+    if(button.classList.contains('quick-weapon')) button.hidden=locked;
     const label = button.querySelector('.cooldown-label');
     if (id === 'flame') { label.textContent = game.heat > 0 ? `${Math.round(game.heat)}°` : ''; button.querySelector('.cooldown-shade').style.height = `${game.heat}%`; }
     else { label.textContent = cooldown > .1 ? `${Math.ceil(cooldown/(id==='net'?1:game.cooldownRate))}s` : ''; button.querySelector('.cooldown-shade').style.height = `${cooldown / spec.cooldown * 100}%`; }
@@ -189,6 +228,11 @@ function burst(x, y, color, amount = 16, power = 60) {
 function processEvents() {
   for (const e of game.drainEvents()) {
     sound.event(e);
+    if(e.type==='combo') {
+      const electric=e.kind==='conductive',color=electric?'#d9ff94':'#a4ecff';
+      floating.push({x:e.x,y:e.y-35,text:`${electric?'소용돌이 감전':'빙결 약점'} ×${Number(e.multiplier.toFixed(2))}`,life:1.15,color});
+      burst(e.x,e.y,color,12,85);
+    }
     if(e.type==='upgradeOffer')progression.open();
     if(e.type==='bossWarning'){announce('DANGER APPROACHING', '6초 뒤 여왕 출현', '절대 영도와 궁극기를 준비하세요');tone(440,.2,'triangle',.08,180);}
     if(e.type==='streakReward'){toast(`${e.streak}연속 처치! +${e.points}점 · 스킬 ${e.seconds}초 회복`);burst(e.x,e.y,'#edeea4',20,100);tone(880,.16,'sine',.07,1320);}
@@ -197,7 +241,7 @@ function processEvents() {
     if (e.type === 'wave') {
       const names = e.unlocked.map(id => WEAPONS.find(w => w.id === id).name);
       announce('MUTATION RISING', `WAVE ${String(e.level).padStart(2,'0')}`, names.length ? `${names.join(' · ')} 해금!` : '더 빠른 부화 · 더 강한 변이');
-      for (const id of e.unlocked) { const button = weaponButtons.find(b => b.dataset.weapon === id); button.classList.add('just-unlocked'); }
+      for (const id of e.unlocked) for (const button of weaponButtons.filter(b => b.dataset.weapon === id)) button.classList.add('just-unlocked');
       if (e.unlocked.includes(selected)) selectWeapon(selected);
       flash = .16; flashColor = '190,215,255'; tone(330,.15,'triangle',.06,900);
     }
@@ -505,7 +549,16 @@ function render(time) {
   for (const f of floating) { ctx.save(); ctx.globalAlpha = Math.min(1, f.life * 2); ctx.fillStyle = f.color; ctx.font = `700 ${Math.max(12, 15 * unit)}px 'Noto Sans KR',sans-serif`; ctx.textAlign = 'center'; ctx.shadowColor = '#12382c'; ctx.shadowBlur = 5; ctx.fillText(f.text, f.x * sx, f.y * sy); ctx.restore(); }
   if (pointer.inside && game.status === 'playing') {
     const w = {...WEAPONS.find(w => w.id === selected),radius:game.weaponRadius(selected)}, ready = game.isUnlocked(selected) && game.cooldowns[selected] <= 0 && !(selected === 'flame' && game.overheated);
-    ctx.save(); ctx.setLineDash([5, 6]); ctx.lineWidth = 1; ellipse(ctx, pointer.x * sx, pointer.y * sy, w.radius * sx, w.radius * sy); ctx.strokeStyle = ready ? '#e6eccb80' : '#e8af8670'; ctx.stroke(); ctx.setLineDash([]);
+    ctx.save(); ctx.setLineDash([5, 6]); ctx.lineWidth = 1; ctx.strokeStyle = ready ? '#e6eccb80' : '#e8af8670'; ctx.fillStyle=ready?'#d8f5ab0c':'#e8af860c';
+    if(selected==='dragon') {
+      const top=Math.max(0,pointer.y-w.radius)*sy,bottom=Math.min(700,pointer.y+w.radius)*sy;
+      ctx.fillRect(0,top,width,bottom-top);ctx.strokeRect(0,top,width,bottom-top);
+    } else if(selected==='thunderstorm') {
+      ctx.fillRect(0,0,width,height);ctx.strokeRect(3,3,width-6,height-6);
+    } else if(selected==='meteor') {
+      for(let i=0;i<5;i++) {const a=i/4*Math.PI*2,r=i===0?0:85;ellipse(ctx,(pointer.x+Math.cos(a)*r)*sx,(pointer.y+Math.sin(a)*r)*sy,135*sx,135*sy);ctx.stroke();}
+    } else {ellipse(ctx,pointer.x*sx,pointer.y*sy,w.radius*sx,w.radius*sy);ctx.fill();ctx.stroke();}
+    ctx.setLineDash([]);
     ellipse(ctx, pointer.x * sx, pointer.y * sy, 2, 2, ready ? '#eef4cf' : '#e8af86'); ctx.restore();
     if (selected === 'net' && !effects.some(e => e.source === 'net')) drawNet(pointer.x * sx, pointer.y * sy, 0, .8);
     if (selected === 'flame' && !effects.some(e => e.source === 'flame')) drawFlamethrower(pointer.x * sx, pointer.y * sy, false, game.isUnlocked('flame') ? .9 : .4);
@@ -523,7 +576,7 @@ function frame(now) {
     if (pointer.down && ['net', 'flame'].includes(selected)) useWeapon(false, dt);
     processEvents();
     if(game.status === 'playing') sound.update(game.level, game.danger);
-    hudTick += dt; if (hudTick > .075 || game.status !== 'playing') { updateHUD(); hudTick = 0; }
+    hudTick += dt; if (hudTick > .075 || game.status !== 'playing') { medals.check(); updateHUD(); hudTick = 0; }
   }
   if (game.status !== 'paused') {
     for (const p of particles) { p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= Math.exp(-dt * 2); p.vy += 15 * dt; }
@@ -537,9 +590,10 @@ function frame(now) {
   render(visualTime); requestAnimationFrame(frame);
 }
 const progression=setupProgression({game,pause:pauseGame,resume:resumeGame,onSelect:p=>{toast(`${p.name} 강화 완료!`);tone(660,.2,'triangle',.08,990);updateHUD();}});
+const medals=setupAchievements({game,mode:()=>runMode,pause:pauseGame,resume:resumeGame,onUnlock:items=>{toast(`훈장 획득! ${items.map(a=>a.name).join(' · ')}`);tone(880,.3,'triangle',.07,1320);}});
 resize(); updateHUD(); requestAnimationFrame(frame);
 
-setupSharing({ pause: () => { const playing = game.status === 'playing'; if (playing) pauseGame(); return playing; }, resume: resumeGame });
+setupSharing({ pause: () => { const playing = game.status === 'playing'; if (playing) pauseGame(); return playing; }, resume: resumeGame, result:()=>game.status==='lost'?`모기 없는 밤 · ${challenge?challenge.date+' 오늘의 연못':'무한 생존'}\n${game.score.toLocaleString()}점 / WAVE ${game.level} / ${game.kills}마리 처치\n최고 ${game.bestStreak}연속 처치 · 여왕 ${game.bossKills}마리\n나의 기록에 도전해 보세요!`:null });
 let guidePaused = false;
 $('guide-btn').addEventListener('click', () => {
   guidePaused = game.status === 'playing'; if (guidePaused) pauseGame();
