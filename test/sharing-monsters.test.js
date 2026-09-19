@@ -12,10 +12,10 @@ test('sharing preserves GitHub Pages subpaths and strips temporary URL state', (
 });
 
 test('spawn mixes unlocked species without changing evolution strength', () => {
-  for (const level of [1,2,3,4,5,6,10]) {
+  for (const level of [1,2,3,4,5,6,10,16,20,40]) {
     const game = new PondGame(); game.start(); game.level = level;
     const spawned = Array.from({length:32}, () => game.spawn(20, 2));
-    const expected = SPECIES.filter(s => s.wave <= level).map(s => s.id).sort();
+    const expected = SPECIES.filter(s => !s.boss && s.wave <= level).map(s => s.id).sort();
     assert.deepEqual([...new Set(spawned.map(e => e.species))].sort(), expected);
     assert.ok(spawned.every(e => e.hp === EVOLUTIONS[2].hp && e.rank === 2));
   }

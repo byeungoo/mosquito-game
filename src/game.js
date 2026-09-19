@@ -155,7 +155,7 @@ function endGame() {
     try { localStorage.setItem('pond-defense-endless-v2', JSON.stringify(best)); } catch { /* Continue without persistence. */ }
   }
   $('result-eyebrow').textContent = 'THE POND HAS FALLEN'; $('result-title').textContent = '연못이 무너졌습니다';
-  $('result-description').textContent = `최고 ${game.bestStreak}연속 처치 · 여왕 ${game.bossKills}마리 · 강화 ${Object.values(game.upgrades).reduce((a,b)=>a+b,0)}회`;
+  $('result-description').textContent = `최고 ${game.bestStreak}연속 처치 · 보스 ${game.bossKills}마리 · 강화 ${Object.values(game.upgrades).reduce((a,b)=>a+b,0)}회`;
   $('result-score').textContent = game.score.toLocaleString(); $('result-level').textContent = `W${game.level}`;
   $('result-kills').textContent = game.kills; $('result-time').textContent = formatTime(game.elapsed);
   const record=challenge?dailyRecords[challenge.date]:best;
@@ -222,9 +222,10 @@ function updateHUD() {
     if (id === 'flame') { label.textContent = game.heat > 0 ? `${Math.round(game.heat)}°` : ''; button.querySelector('.cooldown-shade').style.height = `${game.heat}%`; }
     else { label.textContent = cooldown > .1 ? `${Math.ceil(cooldown/(id==='net'?1:game.cooldownRate))}s` : ''; button.querySelector('.cooldown-shade').style.height = `${cooldown / spec.cooldown * 100}%`; }
   }
-  const boss = game.enemies.find(e => e.rank === 4 && stageOf(e) === 'adult');
+  const bosses=game.enemies.filter(e=>e.rank>=4 && stageOf(e)==='adult');
+  const boss=bosses.reduce((best,e)=>!best||e.rank>best.rank?e:best,null);
   $('boss-hud').classList.toggle('hidden', !boss);
-  if (boss) { $('boss-health').style.width = `${Math.max(0,boss.hp / boss.maxHp * 100)}%`; $('boss-hp-text').textContent = `${Math.ceil(boss.hp)} / ${boss.maxHp}`; }
+  if (boss) { $('boss-hud').querySelector('span').textContent=`${evolutionOf(boss).name}${boss.shield>0?' · 보호막':boss.rage>0?' · 폭주':''}${bosses.length>1?` 외 ${bosses.length-1}`:''}`;$('boss-health').style.background=evolutionOf(boss).color;$('boss-health').style.width = `${Math.max(0,boss.hp / boss.maxHp * 100)}%`; $('boss-hp-text').textContent = `${Math.ceil(boss.hp)} / ${boss.maxHp}`; }
   $('field-note').innerHTML = tips[Math.floor(game.elapsed / 20) % tips.length];
 }
 
@@ -252,7 +253,11 @@ function processEvents() {
       burst(e.x,e.y,color,12,85);
     }
     if(e.type==='upgradeOffer')progression.open();
-    if(e.type==='bossWarning'){announce('DANGER APPROACHING', '6초 뒤 여왕 출현', '절대 영도와 궁극기를 준비하세요');tone(440,.2,'triangle',.08,180);}
+    if(e.type==='bossWarning'){announce('DANGER APPROACHING', `6초 뒤 ${EVOLUTIONS[e.rank??4].name}`, e.rank===6?'전기 공격으로 보호막을 깨뜨리세요':'절대 영도와 궁극기를 준비하세요');tone(440,.2,'triangle',.08,180);}
+    if(e.type==='bossRoar' || e.type==='bossShield' || e.type==='shieldBreak'){
+      effects.push({...e,life:1.1,max:1.1});burst(e.x,e.y,e.type==='bossRoar'?'#ffad61':'#91eaff',22,100);
+      toast(e.type==='bossRoar'?'티라노의 포효! 주변 성충 3초 가속':e.type==='bossShield'?'로봇 보호막! 전기 공격으로 파괴하세요':'보호막 파괴! 지금 집중 공격하세요');tone(e.type==='bossRoar'?65:380,.3,'triangle',.06,e.type==='bossRoar'?110:90);
+    }
     if(e.type==='streakReward'){toast(`${e.streak}연속 처치! +${e.points}점 · 스킬 ${e.seconds}초 회복`);burst(e.x,e.y,'#edeea4',20,100);tone(880,.16,'sine',.07,1320);}
     if(e.type==='ward'){announce('ONE MORE CHANCE','연못의 가호 발동','붕괴 방어 · 모든 적 3초 빙결');flash=.2;flashColor='145,230,255';tone(550,.4,'triangle',.1,1100);}
     if(e.type === 'thunderstorm') { effects.push({...e,life:1.8,max:1.8}); shake = reducedMotion ? 0 : 12; toast(`\uCC9C\uB8B0\uB09C\uBB34! ${e.count}\uB9C8\uB9AC \uD1F4\uCE58`); }
@@ -268,8 +273,8 @@ function processEvents() {
       floating.push({x:e.x,y:e.y-25,text:EVOLUTIONS[e.rank].name,life:1.25,color:EVOLUTIONS[e.rank].color});
       if (e.rank >= 3) tone(110,.15,'sawtooth',.025,65);
     }
-    if (e.type === 'boss') { announce('CATASTROPHE DETECTED','재앙의 여왕','체력 65+ · 위험도 10 · 유충 증식'); flash = .32; flashColor = '255,90,130'; shake = reducedMotion ? 0 : 8; tone(65,.65,'sawtooth',.07,35); burst(e.x,e.y,'#ff6c9c',65,190); }
-    if (e.type === 'bossKilled') { announce('QUEEN ELIMINATED','여왕 처치','+100점 · 한숨 돌릴 시간'); flash = .2; flashColor = '229,170,255'; burst(e.x,e.y,'#ffafd5',100,210); }
+    if (e.type === 'boss') { const boss=EVOLUTIONS[e.rank??4];announce('CATASTROPHE DETECTED',boss.name,`체력 ${boss.hp}+ · 위험도 ${boss.threat} · ${e.rank===5?'포효와 폭주':e.rank===6?'전기 공격으로 보호막 파괴':'유충 증식'}`); flash = .32; flashColor = '255,90,130'; shake = reducedMotion ? 0 : 8; tone(65,.65,'sawtooth',.07,35); burst(e.x,e.y,boss.color,65,190); }
+    if (e.type === 'bossKilled') { const boss=EVOLUTIONS[e.rank??4];announce('BOSS ELIMINATED',`${boss.name} 처치`,`+${boss.points}점 · 한숨 돌릴 시간`); flash = .2; flashColor = '229,170,255'; burst(e.x,e.y,boss.color,100,210); }
     if (e.type === 'breed') burst(e.x,e.y,'#ac87cb',9,45);
     if (e.type === 'damage') {
       for (const target of e.targets.slice(0,e.source==='flame'?3:10)) { burst(target.x,target.y,'#fff1c2',e.source==='flame'?1:3,40); if (e.source !== 'flame' && target.rank > 0) floating.push({x:target.x,y:target.y-12,text:`−${Number(target.amount.toFixed(1))}`,life:.5,color:'#f7c1a2'}); }
@@ -367,7 +372,7 @@ function drawEnemy(e, time) {
   const mutation = evolutionOf(e), size = stage === 'adult' ? mutation.scale : 1 + e.rank * .12;
   if(e.sealed>0){ctx.save();ctx.translate(x+13*unit,y-15*unit);ctx.rotate(.2+Math.sin(time*4+e.seed)*.12);ctx.fillStyle='#f5d788';ctx.fillRect(-4*unit,-8*unit,9*unit,19*unit);ctx.strokeStyle='#b44536';ctx.lineWidth=1.2*unit;ctx.beginPath();ctx.moveTo(0,-5*unit);ctx.lineTo(0,7*unit);ctx.moveTo(-2*unit,-2*unit);ctx.lineTo(3*unit,-2*unit);ctx.moveTo(-3*unit,3*unit);ctx.lineTo(3*unit,3*unit);ctx.stroke();ctx.restore();}
   if (stage === 'adult' && (e.rank > 0 || e.hp < e.maxHp)) {
-    const bar = (e.rank === 4 ? 60 : 31) * unit, ybar = y - (18 * size + 8) * unit;
+    const bar = (e.rank >= 4 ? 60 : 31) * unit, ybar = y - (18 * size + 8) * unit;
     ctx.fillStyle='#0a182bd0';ctx.fillRect(x-bar/2,ybar,bar,3*unit);ctx.fillStyle=mutation.color;ctx.fillRect(x-bar/2,ybar,bar*Math.max(0,e.hp/e.maxHp),3*unit);
     if(e.rank>=3){ctx.font=`600 ${Math.max(8,9*unit)}px sans-serif`;ctx.textAlign='center';ctx.fillStyle=mutation.color;ctx.fillText(speciesOf(e).name,x,ybar-5*unit);}
   }
@@ -518,7 +523,10 @@ function drawEffects() {
     const skill=e.source || ({lightning:'electric',tongue:'frog',sonic:'chorus',sealBurst:'talisman'}[e.type]) || e.type;
 
     const t = 1 - e.life / e.max; ctx.save(); ctx.globalAlpha = Math.min(1, e.life * 5);
-    if(e.type==='bigbang'){
+    if(['bossRoar','bossShield','shieldBreak'].includes(e.type)){
+      const r=(e.radius||130)*t;ctx.strokeStyle=e.type==='bossRoar'?'#ffad61':'#92eeff';ctx.lineWidth=3*unit;ctx.globalAlpha*=1-t;
+      for(let i=0;i<3;i++){ellipse(ctx,e.x*sx,e.y*sy,r*sx*(1-i*.2),r*sy*(1-i*.2));ctx.stroke();}
+    } else if(e.type==='bigbang'){
       drawBigBang(ctx,{t,width,height,rank:game.skillRank('bigbang'),reducedMotion});
     } else if(e.type==='sonic'){
       ctx.translate(e.x*sx,e.y*sy);ctx.strokeStyle='#c9ee9e';ctx.lineWidth=(1-t)*5+1;
@@ -633,7 +641,7 @@ const progression=setupProgression({game,pause:pauseGame,resume:resumeGame,onSel
 const medals=setupAchievements({game,mode:()=>runMode,pause:pauseGame,resume:resumeGame,onUnlock:items=>{toast(`훈장 획득! ${items.map(a=>a.name).join(' · ')}`);tone(880,.3,'triangle',.07,1320);}});
 resize(); updateHUD(); requestAnimationFrame(frame);
 
-setupSharing({ pause: () => { const playing = game.status === 'playing'; if (playing) pauseGame(); return playing; }, resume: resumeGame, result:()=>game.status==='lost'?`모기 없는 밤 · ${challenge?challenge.date+' 오늘의 연못':'무한 생존'}\n${game.score.toLocaleString()}점 / WAVE ${game.level} / ${game.kills}마리 처치\n최고 ${game.bestStreak}연속 처치 · 여왕 ${game.bossKills}마리\n나의 기록에 도전해 보세요!`:null });
+setupSharing({ pause: () => { const playing = game.status === 'playing'; if (playing) pauseGame(); return playing; }, resume: resumeGame, result:()=>game.status==='lost'?`모기 없는 밤 · ${challenge?challenge.date+' 오늘의 연못':'무한 생존'}\n${game.score.toLocaleString()}점 / WAVE ${game.level} / ${game.kills}마리 처치\n최고 ${game.bestStreak}연속 처치 · 보스 ${game.bossKills}마리\n나의 기록에 도전해 보세요!`:null });
 let guidePaused = false;
 $('guide-btn').addEventListener('click', () => {
   guidePaused = game.status === 'playing'; if (guidePaused) pauseGame();
@@ -646,7 +654,7 @@ for (const species of SPECIES) {
   const preview = document.createElement('canvas'); preview.width = 300; preview.height = 180;
   preview.setAttribute('aria-label', species.name + ' 외형'); preview.setAttribute('role', 'img');
   const brush = preview.getContext('2d'); brush.translate(145,95); brush.scale(2.6,2.6);
-  drawMonster(brush, { species: species.id, rank: 2, seed: 2 }, .3);
+  drawMonster(brush, { species: species.id, rank: species.rank||2, seed: 2 }, .3);
   const name = document.createElement('h3'); name.textContent = species.name;
   const info = document.createElement('p'); info.textContent = `W${species.wave}부터 · ${species.detail}`;
   card.append(preview,name,info); $('monster-gallery').append(card);

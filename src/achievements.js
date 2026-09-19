@@ -1,7 +1,7 @@
 export const ACHIEVEMENTS = [
   {id:'hunter',name:'연못 청소부',description:'한 판에서 모기 100마리 처치',goal:100,value:g=>g.kills,icon:'net'},
   {id:'chain',name:'끊기지 않는 손놀림',description:'24연속 처치 달성',goal:24,value:g=>g.bestStreak,icon:'bolt'},
-  {id:'queen',name:'왕관 파괴자',description:'재앙의 여왕 첫 처치',goal:1,value:g=>g.bossKills,icon:'dragon'},
+  {id:'queen',name:'왕관 파괴자',description:'여왕·티라노·로봇 중 보스 첫 처치',goal:1,value:g=>g.bossKills,icon:'dragon'},
   {id:'wave',name:'한계를 넘어서',description:'WAVE 10 도달',goal:10,value:g=>g.level,icon:'meteor'},
   {id:'squad',name:'연못 사령관',description:'미꾸라지와 개구리 합계 10마리 배치',goal:10,value:g=>g.allies.length,icon:'frog'},
   {id:'daily',name:'오늘도 출동',description:'오늘의 연못에서 WAVE 5 도달',goal:5,value:(g,mode)=>mode==='daily'?g.level:0,icon:'palm'},

@@ -7,6 +7,8 @@ export const EVOLUTION_SECONDS = 15;
 export const ALLY_LIMITS = { loach: 10, frog: 10 };
 export const ALLY_ATTACK_INTERVALS = { loach: 1.5, frog: 1.3 };
 export const maxRankForLevel = level => level >= 8 ? 4 : level >= 5 ? 3 : level >= 3 ? 2 : 1;
+// Late bosses replace scheduled queens; natural evolution still ends at queen.
+export const bossRankForWave = wave => wave < 16 ? 4 : wave < 20 ? 5 : ((wave-20)/4)%2===0 ? 6 : 5;
 // Blend encounter rates rather than rounding enemy batches upward at every wave.
 export function spawnRateForLevel(level) {
   const denseRate = Math.min(10, 3 + Math.floor(level / 2)) / Math.max(.45, 1.65 - level * .09);
@@ -19,6 +21,8 @@ export const EVOLUTIONS = [
   { name: '철갑종', hp: 11, threat: 3, scale: 1.7, color: '#abc5e8', speed: 1.05, points: 12 },
   { name: '사신종', hp: 20, threat: 5, scale: 2.05, color: '#d29aff', speed: 1.6, points: 25 },
   { name: '재앙의 여왕', hp: 65, threat: 10, scale: 3.2, color: '#ff638e', speed: .8, points: 100 },
+  { name: '모기 티라노', hp: 140, threat: 12, scale: 3.5, color: '#ffad61', speed: .75, points: 250 },
+  { name: '모기 로봇', hp: 240, threat: 14, scale: 3.7, color: '#76e5ff', speed: .65, points: 450 },
 ];
 export const WEAPONS = [
   { id: 'net', key: '1', unlock: 1, name: '대왕 뜰채', icon: 'net', tag: '기본 공격 · 물속 + 공중', cooldown: .48, radius: 56, damage: 1, description: '물속은 한 번에, 일반 성충은 두 번! 드래그로 연속 공격해요.', hint: '클릭 / 드래그 · 기본 피해 1, 성충도 공격 가능' },
@@ -113,13 +117,14 @@ export class PondGame {
     const hp = age >= 20 ? EVOLUTIONS[rank].hp : 1 + Math.floor(rank / 2);
     const e = { id: this.nextId++, x: 500 + Math.cos(angle) * 420 * radius, y: 390 + Math.sin(angle) * 245 * radius, age, rank, hp, maxHp: hp, evolve: 0, breed: 0, angle: this.random() * Math.PI * 2, seed: this.random() * 100, frozen: 0, turn: 0, hit: 0, sealed: 0 };
     e.species = speciesForSpawn(e.id, this.level);
+    if(rank>=5){e.species=rank===5?'tyranno':'robot';e.bossTimer=0;e.shield=0;e.rage=0;}
     this.enemies.push(e); return e;
   }
   emit(type, data = {}) { this.events.push({ type, ...data }); }
   spawnWaveEnemy(age,rank,bossLevel=0) {
     if(this.timeStopRemaining>0){this.pendingSpawns.push({age,rank,bossLevel});return;}
     const e=this.spawn(age,rank);
-    if(e && bossLevel){e.hp+=(bossLevel-8)*4;e.maxHp=e.hp;this.emit('boss',{x:e.x,y:e.y});}
+    if(e && bossLevel){e.hp+=Math.max(0,bossLevel-(rank===6?20:rank===5?16:8))*4;e.maxHp=e.hp;this.emit('boss',{x:e.x,y:e.y,rank});}
   }
   drainEvents() { return this.events.splice(0); }
   damage(targets, amount, source, x, y) {
@@ -128,7 +133,10 @@ export class PondGame {
     for (const e of targets) {
       const conductive = ['electric','thunderstorm'].includes(source) && this.fields.some(f=>f.type==='vortex' && f.remaining>0 && distance(e,f)<=f.radius);
       const base=amount+(source==='net'?(this.upgrades.netcraft || 0):0);
-      const hit=base*this.skillPower(source)*(1+(this.upgrades.power || 0)*.12)*(e.frozen>0?1.5+(this.upgrades.icecraft || 0)*.15:1)*(e.rank>=3&&stageOf(e)==='adult'?1+(this.upgrades.hunter || 0)*.25:1)*(conductive?1.25:1);
+      const electric=['electric','thunderstorm'].includes(source);
+      if(e.rank===6 && e.shield>0 && electric){e.shield=0;this.emit('shieldBreak',{x:e.x,y:e.y});}
+      const armor=e.rank===6 && e.shield>0?.5:1;
+      const hit=base*this.skillPower(source)*(1+(this.upgrades.power || 0)*.12)*(e.frozen>0?1.5+(this.upgrades.icecraft || 0)*.15:1)*(e.rank>=3&&stageOf(e)==='adult'?1+(this.upgrades.hunter || 0)*.25:1)*(conductive?1.25:1)*armor;
       if(conductive) combos.set('conductive',e);
       if(e.frozen>0) combos.set('frozen',e);
       e.hp -= hit; e.hit = .15;
@@ -142,7 +150,7 @@ export class PondGame {
     if (!dead.length) return 0;
     const ids = new Set(dead.map(e => e.id)); this.enemies = this.enemies.filter(e => !ids.has(e.id));
     this.kills += dead.length; this.bestCombo = Math.max(this.bestCombo, dead.length);
-    for (const e of dead) { this.score += stageOf(e) === 'adult' ? evolutionOf(e).points : 1 + e.rank; if (e.rank === 4 && stageOf(e) === 'adult') { this.bossKills++; this.emit('bossKilled', { x: e.x, y: e.y }); } }
+    for (const e of dead) { this.score += stageOf(e) === 'adult' ? evolutionOf(e).points : 1 + e.rank; if (e.rank >= 4 && stageOf(e) === 'adult') { this.bossKills++; this.emit('bossKilled', { x: e.x, y: e.y, rank:e.rank }); } }
     if (this.elapsed > this.streakUntil) { this.streak=0; this.streakRewards=0; }
     this.streak+=dead.length; this.bestStreak=Math.max(this.bestStreak,this.streak); this.streakUntil=this.elapsed+4;
     const rewards=Math.min(3,Math.floor(this.streak/12)), earned=rewards-this.streakRewards;
@@ -200,7 +208,7 @@ export class PondGame {
     }
     if (id === 'rewind') {
       for (const e of targets) {
-        if (e.rank === 4 && stageOf(e) === 'adult') { e.frozen = Math.max(e.frozen, 2.5); continue; }
+        if (e.rank >= 4 && stageOf(e) === 'adult') { e.frozen = Math.max(e.frozen, 2.5); continue; }
         const healthRatio = e.hp / e.maxHp;
         if (stageOf(e) === 'adult') { if (e.rank > 0) e.rank--; else e.age = 10; }
         else e.age = Math.max(0, e.age - 9 - this.skillRank('rewind')*2);
@@ -223,7 +231,7 @@ export class PondGame {
       this.emit(id, point); return { ok: true };
     }
     if (id === 'freeze') {
-      for (const e of targets) e.frozen = e.rank === 4 ? 2.5 : 5+(this.upgrades.icecraft || 0)+this.skillRank('freeze')*.75;
+      for (const e of targets) e.frozen = e.rank >= 4 ? 2.5 : 5+(this.upgrades.icecraft || 0)+this.skillRank('freeze')*.75;
       this.fields.push({ x, y, type: 'freeze', remaining: 1.3, radius: w.radius }); this.emit('freeze', { x, y, count: targets.length }); return { ok: true };
     }
     if (id === 'meteor') {
@@ -288,11 +296,11 @@ export class PondGame {
         const rank = Math.max(1, Math.min(3, Math.floor((this.level - 1) / 3)));
         for (let i = 0; i < Math.min(4, 1 + Math.floor((this.level - 3) / 3)); i++) this.spawnWaveEnemy(20, rank);
       }
-      if (this.level >= 8 && (this.level - 8) % 4 === 0) this.spawnWaveEnemy(20,4,this.level);
+      if (this.level >= 8 && (this.level - 8) % 4 === 0) this.spawnWaveEnemy(20,bossRankForWave(this.level),this.level);
     }
     const nextBoss=8+Math.max(0,Math.ceil((this.level+1-8)/4))*4;
     if(nextBoss===this.level+1 && (1-this.waveProgress)*WAVE_SECONDS<=6 && this.bossWarningWave!==nextBoss) {
-      this.bossWarningWave=nextBoss;this.emit('bossWarning',{level:nextBoss});
+      this.bossWarningWave=nextBoss;this.emit('bossWarning',{level:nextBoss,rank:bossRankForWave(nextBoss)});
     }
     for (const id in this.cooldowns) this.cooldowns[id] = Math.max(0, this.cooldowns[id] - dt * (['net','flame'].includes(id)?1:this.cooldownRate));
     if (this.elapsed > this.flameUntil + 1e-6) this.heat = Math.max(0, this.heat - dt * 22);
@@ -350,12 +358,22 @@ export class PondGame {
           e.rank++; e.evolve = 0; e.maxHp = evolutionOf(e).hp; e.hp = e.maxHp * healthRatio;
           this.emit('evolve', { x: e.x, y: e.y, rank: e.rank });
         }
-        if (e.rank >= 3) { e.breed += dt; if (e.breed >= 8.5) { e.breed = 0; offspring += e.rank === 4 ? 4 : 2; this.emit('breed', { x: e.x, y: e.y }); } }
+        if (e.rank >= 3 && e.rank <= 4) { e.breed += dt; if (e.breed >= 8.5) { e.breed = 0; offspring += e.rank === 4 ? 4 : 2; this.emit('breed', { x: e.x, y: e.y }); } }
+        e.rage=Math.max(0,(e.rage||0)-dt);e.shield=Math.max(0,(e.shield||0)-dt);
+        if(e.rank>=5){
+          e.bossTimer=(e.bossTimer||0)+dt;
+          if(e.bossTimer>=(e.rank===5?7:9)){
+            e.bossTimer=0;
+            if(e.rank===5){for(const nearby of this.enemies)if(stageOf(nearby)==='adult' && distance(e,nearby)<=260)nearby.rage=3;this.emit('bossRoar',{x:e.x,y:e.y,radius:260});}
+            else {e.shield=4;this.emit('bossShield',{x:e.x,y:e.y});}
+          }
+        }
       }
       e.turn -= dt;
       if (e.turn <= 0) { e.angle += (this.random() - .5) * (e.rank === 3 ? 4 : 2.6); e.turn = .25 + this.random() * .9; }
       const speed = stage === 'adult' ? 74 * evolutionOf(e).speed * (1 + Math.min(.6, this.level * .025)) : stage === 'larva' ? 16 + this.level : stage === 'pupa' ? 5 : 1;
-      e.x += Math.cos(e.angle) * speed * dt; e.y += Math.sin(e.angle) * speed * dt;
+      const haste=e.rage>0?1.65:1;
+      e.x += Math.cos(e.angle) * speed * haste * dt; e.y += Math.sin(e.angle) * speed * haste * dt;
       if (stage === 'adult') {
         if (e.x < 40 || e.x > 960) { e.angle = Math.PI - e.angle; e.x = Math.max(40, Math.min(960, e.x)); }
         if (e.y < 160 || e.y > 640) { e.angle = -e.angle; e.y = Math.max(160, Math.min(640, e.y)); }

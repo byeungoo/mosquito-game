@@ -8,15 +8,18 @@ export const SPECIES = [
   { id: 'brood', name: '눈알 포식자', wave: 4, color: '#f594b8', detail: '여섯 개의 눈 · 부풀어 오른 주머니 · 원형 이빨' },
   { id: 'wraith', name: '해골 망령', wave: 5, color: '#c1d8fa', detail: '빈 눈구멍과 드러난 갈비뼈, 너덜너덜한 날개' },
   { id: 'hydra', name: '삼두 재앙룡', wave: 6, color: '#ff8d7c', detail: '세 개의 흡혈 머리와 꿈틀거리는 용의 꼬리' },
+  { id: 'tyranno', name: '모기 티라노', wave: 16, boss: true, rank: 5, color: '#ffad61', detail: '보스 · 체력 140 · 거대 턱과 흡혈침. 7초마다 포효해 주변 성충을 3초간 가속합니다.' },
+  { id: 'robot', name: '모기 로봇', wave: 20, boss: true, rank: 6, color: '#76e5ff', detail: '보스 · 체력 240 · 9초마다 4초 보호막으로 피해를 절반 흡수. 전기 방전봉·천뢰난무로 파괴하세요.' },
 ];
 export const speciesOf = enemy => SPECIES.find(s => s.id === enemy.species) || SPECIES[0];
 export function speciesForSpawn(id, level) {
-  const available = SPECIES.filter(s => s.wave <= level);
+  const available = SPECIES.filter(s => !s.boss && s.wave <= level);
   return available[(id - 1) % available.length].id;
 }
 
 // Canvas-native art, reused in the pond and the field guide.
 export function drawMonster(ctx, enemy, time) {
+  if(enemy.rank>=5 || ['tyranno','robot'].includes(enemy.species)){drawBossMonster(ctx,enemy,time);return;}
   const s = speciesOf(enemy), c = s.color, rank = enemy.rank || 0;
   const t = enemy.frozen ? 0 : time, phase = enemy.seed || 0;
   const beat = .65 + Math.abs(Math.sin(t * (s.id === 'bat' ? 18 : 42) + phase)) * .45;
@@ -76,4 +79,51 @@ export function drawMonster(ctx, enemy, time) {
   if(rank>=2)for(let i=0;i<3;i++)for(const side of [-1,1])poly([[-13+i*5,side*3],[-16+i*5,side*(8+rank)],[-9+i*5,side*4]],c);
   if(rank===4){poly([[2,-5],[1,-14],[7,-10],[11,-18],[14,-9],[18,-13],[16,-3]],'#ffd27e');eye(10,-8,2);}
   ctx.restore();
+}
+
+function drawBossMonster(c,e,time){
+  const robot=e.rank===6 || e.species==='robot', t=e.frozen?0:time;
+  const wing=.8+Math.sin(t*(robot?18:24)+(e.seed||0))*.18;
+  const color=robot?'#76e5ff':'#ffad61';
+  const poly=(p,fill,stroke=color,w=.7)=>{c.beginPath();p.forEach(([x,y],i)=>i?c.lineTo(x,y):c.moveTo(x,y));c.closePath();c.fillStyle=fill;c.fill();c.strokeStyle=stroke;c.lineWidth=w;c.stroke();};
+  const line=(p,color,w)=>{c.beginPath();p.forEach(([x,y],i)=>i?c.lineTo(x,y):c.moveTo(x,y));c.strokeStyle=color;c.lineWidth=w;c.stroke();};
+  const oval=(x,y,rx,ry,fill)=>{c.beginPath();c.ellipse(x,y,rx,ry,0,0,Math.PI*2);c.fillStyle=fill;c.fill();};
+  c.save();c.lineJoin='round';c.lineCap='round';
+  oval(-4,12,28,6,'#07152255');
+  if(robot){
+    // Angular mechanical wings, thrusters and six articulated landing claws.
+    for(const side of [-1,1]){
+      c.save();c.scale(1,side*wing);
+      poly([[-6,-3],[-31,-26],[-12,-22],[7,-5]],'#30495f');
+      poly([[-5,-7],[-25,-22],[-13,-19],[1,-7]],'#8deaff99');
+      line([[-21,-20],[-16,-14],[-7,-9]],'#e2fbff',.8);c.restore();
+      for(let i=0;i<3;i++){const x=-13+i*10;line([[x,side*5],[x-5,side*15],[x+4,side*(22+i%2*3)]],'#203447',3.2);line([[x,side*5],[x-5,side*15],[x+4,side*(22+i%2*3)]],'#afc9dd',1.5);oval(x-5,side*15,1.7,1.7,'#5ff1ff');}
+      poly([[-21,side*5],[-33-Math.sin(t*12)*3,side*8],[-22,side*11]],'#67dbff88');
+    }
+    poly([[-25,-6],[-18,-12],[5,-11],[15,-6],[15,7],[4,12],[-19,10]],'#637c93');
+    for(let i=0;i<3;i++)poly([[-22+i*8,-6],[-17+i*8,-9],[-12+i*8,-5],[-12+i*8,7],[-20+i*8,8]],i%2?'#34445e':'#94b0c4');
+    oval(-4,0,9,9,'#1a2647');oval(-4,0,6.5,6.5,e.shield>0?'#d8ffff':'#64dfff');oval(-4,0,3.5,3.5,'#ffffff');
+    poly([[11,-9],[24,-7],[28,0],[23,10],[10,8]],'#b1c8d5');
+    poly([[15,-5],[24,-4],[23,0],[15,2]],'#ff5076');
+    line([[26,3],[44,3]],'#35475e',4);line([[27,2],[46,2]],'#d4f6ff',1.2);
+    for(const side of [-1,1]){line([[14,side*7],[13,side*16],[20,side*19]],'#97c2d9',1.6);oval(20,side*19,2,2,'#ff5d94');}
+    if(e.shield>0){c.beginPath();for(let i=0;i<=6;i++){const a=i*Math.PI/3;const x=Math.cos(a)*37,y=Math.sin(a)*29;i?c.lineTo(x,y):c.moveTo(x,y);}c.fillStyle='#70dbff20';c.fill();c.strokeStyle='#a7f5ff';c.lineWidth=1.4;c.stroke();}
+  }else{
+    // Tyrannosaur silhouette: long tail, muscular legs, short forearms, huge toothed jaws.
+    for(const side of [-1,1]){c.save();c.scale(1,side*wing);poly([[-5,0],[-25,-26],[-6,-21],[11,-4]],'#ecb77645');line([[-5,-3],[-21,-23],[-7,-14]],'#ffe3a5',.6);c.restore();}
+    c.beginPath();c.moveTo(-8,-7);c.bezierCurveTo(-30,-5,-33,13,-48,3+Math.sin(t*4)*4);c.bezierCurveTo(-36,23,-19,10,-5,10);c.closePath();c.fillStyle='#bd633f';c.fill();c.strokeStyle='#ffbd73';c.lineWidth=.8;c.stroke();
+    for(const side of [-1,1]){oval(-8,side*8,8,5,'#ab573c');line([[-8,side*8],[-12,side*18],[-2,side*21]],'#d5854e',5);for(let i=0;i<3;i++)line([[-3+i*2,side*20],[3+i*2,side*(22+i)]],'#fff0c6',1);}
+    oval(-6,0,17,10,'#de9553');oval(-4,3,13,5,'#edbd77');
+    for(let i=0;i<5;i++)poly([[-23+i*6,-4],[-22+i*6,-14-i%2*3],[-17+i*6,-7]],'#72404a');
+    poly([[3,-8],[13,-15],[29,-13],[35,-7],[35,3],[17,5],[8,10]],'#d78548');
+    poly([[14,1],[34,0],[31,13],[13,13],[7,7]],'#49293a');
+    const gape=2+Math.sin(t*5)*1.2;
+    poly([[13,12],[31,11],[28,15+gape],[11,15+gape],[5,8]],'#c56c43');
+    for(let i=0;i<5;i++){const x=14+i*4;poly([[x,2],[x+3,2],[x+1,7]],'#fff3c9');poly([[x,12],[x+3,12],[x+2,8]],'#ffe8b8');}
+    line([[32,-5],[47,-9]],'#ffe7ad',1.5);line([[12,-14],[17,-20],[22,-18]],'#a85440',1.2);
+    oval(23,-8,4,2.8,'#ffe583');oval(24,-8,1,2.5,'#722439');line([[18,-12],[28,-11]],'#72383c',1.6);
+    for(const side of [-1,1])line([[5,side*6],[10,side*10],[15,side*9]],'#f2ba70',2);
+    if(e.rage>0){c.beginPath();c.ellipse(0,0,36,26,0,0,Math.PI*2);c.strokeStyle='#ff7659aa';c.lineWidth=1.4;c.stroke();}
+  }
+  c.restore();
 }
