@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PondGame,WEAPONS,WAVE_SECONDS } from '../src/core.js';
 import { SKILL_UPGRADES,offerUpgrades,UPGRADES } from '../src/upgrades.js';
-function setup(level=11){const g=new PondGame(()=>.5);g.start();g.level=level;g.elapsed=(level-1)*WAVE_SECONDS;g.enemies=[];g.spawnTimer=Infinity;return g;}
+function setup(level=12){const g=new PondGame(()=>.5);g.start();g.level=level;g.elapsed=(level-1)*WAVE_SECONDS;g.enemies=[];g.spawnTimer=Infinity;return g;}
 function award(g,id){g.upgradeOffer=[`skill_${id}`];assert.equal(g.chooseUpgrade(`skill_${id}`),true);}
 function target(g,x=500,y=390){const e=g.spawn(20,4);Object.assign(e,{x,y,frozen:0});return e;}
 test('every weapon has three real upgrade ranks, a cap and per-run reset',()=>{

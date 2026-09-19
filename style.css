@@ -53,3 +53,5 @@
   .start-card .primary-btn{padding:12px 14px}
 }
 .skill-rank{position:absolute;top:3px;left:4px;z-index:3;font-size:8px;font-weight:900;color:#5b8650}.weapon-btn.selected .skill-rank{color:#e7ffb4}.weapon-btn[data-mastery='1']{border-color:#8eae79}.weapon-btn[data-mastery='2']{border-color:#69b6c0}.weapon-btn[data-mastery='3']{border-color:#b59ad7;box-shadow:inset 0 0 10px #bca0e92b}.weapon-btn[data-mastery='1'] .keycap,.weapon-btn[data-mastery='2'] .keycap,.weapon-btn[data-mastery='3'] .keycap{display:none}.upgrade-description b{color:#627da0}
+.time-stop-hud{position:absolute;right:17px;top:150px;padding:6px 10px;border:1px solid #b9efff66;border-radius:20px;background:#142d4dcc;color:#cff5ff;font-size:10px;pointer-events:none;font-variant-numeric:tabular-nums}
+@media(max-width:760px){.quick-weapons{grid-template-columns:repeat(6,minmax(0,1fr))}.quick-weapon .weapon-name{font-size:8px!important}.time-stop-hud{font-size:8px}}

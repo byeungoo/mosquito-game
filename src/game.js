@@ -1,10 +1,11 @@
 import { PondAudio } from './audio.js';
-import { drawSkillEvolution } from './skill-effects.js';
+import { drawSkillEvolution, drawEvolvedFlame, drawEvolvedBolt, drawPalmEchoes } from './skill-effects.js';
+import { SKILL_FORMS } from './upgrades.js';
 import { bindPondPointer } from './pointer.js';
 import { dailyChallenge, seededRandom, saveDailyRecord } from './daily.js';
 import { setupAchievements } from './achievements.js';
 import { setupProgression } from './progression-ui.js';
-import { drawDragonKing, drawThunderstorm } from './spectacle.js';
+import { drawDragonSummon, drawThunderstorm, drawBigBang, drawTimeStop } from './spectacle.js';
 import { SPECIES, speciesOf, drawMonster } from './monsters.js';
 import { setupSharing } from './share.js';
 import { PondGame, WEAPONS, stageOf, THREAT_LIMIT, EVOLUTIONS, evolutionOf, ALLY_LIMITS } from './core.js';
@@ -168,6 +169,8 @@ function formatTime(time) { const sec = Math.floor(time); return `${String(Math.
 
 function updateHUD() {
   $('time-value').textContent = formatTime(game.elapsed);
+  $('time-stop-hud').hidden=game.timeStopRemaining<=0;
+  $('time-stop-hud').textContent=`시간 정지 · ${game.timeStopRemaining.toFixed(1)}초`;
   $('streak-hud').classList.toggle('hidden',game.streak<3 || game.status==='ready' || game.status==='lost');
   $('streak-value').textContent=`${game.streak} CHAIN`;
   $('streak-bar').style.width=`${Math.max(0,Math.min(100,(game.streakUntil-game.elapsed)/4*100))}%`;
@@ -195,7 +198,7 @@ function updateHUD() {
     else if(selected==='net')$('weapon-hint').textContent=`클릭 / 드래그 · 피해 ${Number(((1+(game.upgrades.netcraft||0))*power).toFixed(1))} · 성충도 공격 가능`;
     else {
       const base=w.damage??({chorus:2,talisman:8}[selected]);
-      if(base)$('detail-tag').textContent=`피해 ${Number((base*power).toFixed(1))}${selected==='thunderstorm'?' · 전장 전체':` · 반경 ${Math.round(game.weaponRadius(selected))}`}`;
+      if(base)$('detail-tag').textContent=`피해 ${Number((base*power).toFixed(1))}${['thunderstorm','bigbang'].includes(selected)?' · 전장 전체':` · 반경 ${Math.round(game.weaponRadius(selected))}`}`;
     }
   }
   const allyCount = ALLY_LIMITS[selected] ? game.allies.filter(a => a.type === selected).length : 0;
@@ -204,7 +207,7 @@ function updateHUD() {
   const mastery=game.skillRank(selected);
   $('quick-name').textContent=`${w.name}${mastery?` · LV ${mastery}`:''}`;
   if(mastery){
-    const control=['vortex','freeze','rewind'].includes(selected),damage=control?'제어 강화':`피해 +${mastery*20}%`;
+      const control=['vortex','freeze','rewind','timestop'].includes(selected),damage=control?'제어 강화':`피해 +${mastery*20}%`;
     $('detail-tag').textContent+=` · 진화 ${mastery}/3 (${damage})`;
   }
   $('heat-hud').classList.toggle('hidden',selected!=='flame' || !['playing','paused'].includes(game.status));
@@ -240,6 +243,9 @@ function burst(x, y, color, amount = 16, power = 60) {
 function processEvents() {
   for (const e of game.drainEvents()) {
     sound.event(e);
+    if(e.type==='timestop')toast(`타임스톱! ${e.duration}초 동안 출현·성장·이동 정지`);
+    if(e.type==='bigbangCharge')toast('빅뱅 어택 · 우주 에너지 압축 중');
+    if(e.type==='bigbang'){effects.push({...e,life:2.4,max:2.4});shake=reducedMotion?0:14;toast(`우주 대폭발! ${e.count}마리 퇴치`);}
     if(e.type==='combo') {
       const electric=e.kind==='conductive',color=electric?'#d9ff94':'#a4ecff';
       floating.push({x:e.x,y:e.y-35,text:`${electric?'소용돌이 감전':'빙결 약점'} ×${Number(e.multiplier.toFixed(2))}`,life:1.15,color});
@@ -398,18 +404,19 @@ function drawEnemy(e, time) {
 
 function drawAlly(a, time) {
   skillAura(a.type,a.x,a.y,32, time,.65);
-  ctx.save(); ctx.translate(a.x * sx, a.y * sy); ctx.scale(unit, unit);
+  const allyScale=unit*(1+game.skillRank(a.type)*.2);
+  ctx.save(); ctx.translate(a.x * sx, a.y * sy); ctx.scale(allyScale, allyScale);
   if (a.type === 'loach') {
     ctx.rotate(a.angle); const growth = 1 + Math.min(a.eaten, 20) * .014; ctx.scale(growth, growth);
     const wiggle = Math.sin(time * 9 + a.seed) * 8;
     ctx.beginPath(); ctx.moveTo(-27, wiggle); ctx.bezierCurveTo(-12, -9, 6, 4, 17, 0); ctx.lineWidth = 12; ctx.lineCap = 'round'; ctx.strokeStyle = '#152f2855'; ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(-27, wiggle - 3); ctx.bezierCurveTo(-12, -12, 6, 1, 17, -3); ctx.lineWidth = 9; ctx.strokeStyle = '#b49a6b'; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-27, wiggle - 3); ctx.bezierCurveTo(-12, -12, 6, 1, 17, -3); ctx.lineWidth = 9; ctx.strokeStyle = ['#b49a6b','#88d9b2','#7cdcff','#edc77f'][game.skillRank('loach')]; ctx.stroke();
     ctx.beginPath(); ctx.moveTo(-25, wiggle - 4); ctx.bezierCurveTo(-10, -12, 8, -1, 17, -4); ctx.lineWidth = 3; ctx.strokeStyle = '#dac193'; ctx.stroke();
     ellipse(ctx, 16, -4, 8, 5.5, '#cbb081'); ellipse(ctx, 19, -6, 1.5, 1.5, '#192d27');
     ctx.strokeStyle = '#dbc9a2'; ctx.lineWidth = 1; for (const side of [-1, 1]) { ctx.beginPath(); ctx.moveTo(22, -3); ctx.quadraticCurveTo(30, side * 8, 33, side * 3); ctx.stroke(); }
   } else {
-    ctx.restore(); lily(ctx, a.x * sx, a.y * sy, 26 * unit, .7, '#719557'); ctx.save(); ctx.translate(a.x * sx, a.y * sy); ctx.scale(unit, unit); ctx.rotate(a.angle + Math.PI / 2);
-    ellipse(ctx, -10, 5, 7, 5, '#426f40', -.5); ellipse(ctx, 10, 5, 7, 5, '#426f40', .5); ellipse(ctx, 0, 0, 11, 12, '#8aad67'); ellipse(ctx, 0, 3, 7, 8, '#b8ca84');
+    ctx.restore(); lily(ctx, a.x * sx, a.y * sy, 26 * unit, .7, '#719557'); ctx.save(); ctx.translate(a.x * sx, a.y * sy); ctx.scale(allyScale, allyScale); ctx.rotate(a.angle + Math.PI / 2);
+    ellipse(ctx, -10, 5, 7, 5, '#426f40', -.5); ellipse(ctx, 10, 5, 7, 5, '#426f40', .5); ellipse(ctx, 0, 0, 11, 12, ['#8aad67','#b7df71','#72deda','#c4a0ff'][game.skillRank('frog')]); ellipse(ctx, 0, 3, 7, 8, '#b8ca84');
     ellipse(ctx, -7, -9, 5, 5, '#94b870'); ellipse(ctx, 7, -9, 5, 5, '#94b870'); ellipse(ctx, -7, -10, 2.3, 2.8, '#192f2a'); ellipse(ctx, 7, -10, 2.3, 2.8, '#192f2a');
   }
   ctx.restore();
@@ -417,25 +424,26 @@ function drawAlly(a, time) {
 
 function skillAura(id,x,y,radius,time,alpha=1) {
   if(!WEAPONS.some(w=>w.id===id))return;
-  drawSkillEvolution(ctx,{id,tier:game.effectTier(id),x,y,radius,sx,sy,time,alpha,reducedMotion});
+  drawSkillEvolution(ctx,{id,tier:game.effectTier(id),rank:game.skillRank(id),x,y,radius,sx,sy,time,alpha,reducedMotion});
 }
 function drawFields(time) {
   for (const f of game.fields) {
+    if(f.type==='bigbang'){drawBigBang(ctx,{t:1-f.remaining/1.2,width,height,rank:game.skillRank('bigbang'),charging:true,reducedMotion});continue;}
     skillAura(f.type,f.x,f.y,f.radius,time,.7);
     ctx.save(); ctx.translate(f.x * sx, f.y * sy);
     if (f.type === 'chorus') {
-      for(let i=-1;i<=1;i++){
+      for(let i=-1-game.skillRank('chorus');i<=1+game.skillRank('chorus');i++){
         const bounce=Math.max(0,Math.sin(time*5+i)) * 3*unit;ctx.save();ctx.translate(i*31*unit,(Math.abs(i)*10-bounce)*unit);ctx.scale(unit,unit);
         ellipse(ctx,0,7,19,9,'#23493288');ellipse(ctx,-11,9,9,5,'#587848');ellipse(ctx,11,9,9,5,'#587848');ellipse(ctx,0,0,17,15,'#a3b86d');ellipse(ctx,-10,-11,6,6,'#c4d786');ellipse(ctx,10,-11,6,6,'#c4d786');ellipse(ctx,-10,-12,2,3,'#25392d');ellipse(ctx,10,-12,2,3,'#25392d');ellipse(ctx,0,5,8+Math.max(0,Math.sin(time*5))*4,6,'#e4e7aa');ellipse(ctx,0,4,5,3+Math.max(0,Math.sin(time*5))*3,'#42573c');ctx.restore();
       }
       ctx.fillStyle='#d9f3af';ctx.font=`bold ${18*unit}px sans-serif`;ctx.fillText('♫',-50*unit,-25*unit);ctx.fillText('♪',37*unit,-35*unit);
     } else if (f.type === 'blackhole') {
-      const r=f.radius*unit*.6;ctx.rotate(time*2);ctx.scale(1,.72);const glow=ctx.createRadialGradient(0,0,r*.15,0,0,r);glow.addColorStop(0,'#0b001b');glow.addColorStop(.3,'#240939');glow.addColorStop(.45,'#e3b5ffbc');glow.addColorStop(.55,'#9d5fe25c');glow.addColorStop(1,'#603bb600');ellipse(ctx,0,0,r,r,glow);
+      const r=f.radius*unit*(.6+game.skillRank('blackhole')*.1);ctx.rotate(time*2);ctx.scale(1,.72);const glow=ctx.createRadialGradient(0,0,r*.15,0,0,r);glow.addColorStop(0,'#0b001b');glow.addColorStop(.3,'#240939');glow.addColorStop(.45,'#e3b5ffbc');glow.addColorStop(.55,'#9d5fe25c');glow.addColorStop(1,'#603bb600');ellipse(ctx,0,0,r,r,glow);
       ctx.strokeStyle='#e8c4ff';ctx.lineWidth=2;ellipse(ctx,0,0,r*.48,r*.48);ctx.stroke();ellipse(ctx,0,0,r*.34,r*.34,'#0c0717');
       for(let i=0;i<7;i++){const a=time*3+i*.897,rr=r*(.55+.4*((time*.4+i*.17)%1));ellipse(ctx,Math.cos(a)*rr,Math.sin(a)*rr,3*unit,2*unit,'#e4a9ff');}
     } else if(f.type==='meteor') {
       ctx.globalAlpha=.5+Math.sin(time*18)*.2;ctx.strokeStyle='#ffad79';ctx.lineWidth=2;ctx.setLineDash([5,5]);ellipse(ctx,0,0,f.radius*sx,f.radius*sy);ctx.stroke();ctx.setLineDash([]);ctx.beginPath();ctx.moveTo(-12,0);ctx.lineTo(12,0);ctx.moveTo(0,-12);ctx.lineTo(0,12);ctx.stroke();
-      if(f.remaining<.6){const offset=f.remaining/.6*height*.7;ctx.strokeStyle='#ffc371';ctx.lineWidth=9*unit;ctx.shadowColor='#ff8c46';ctx.shadowBlur=24;ctx.beginPath();ctx.moveTo(offset*.45,-offset);ctx.lineTo(offset*.45+45*unit,-offset-100*unit);ctx.stroke();ellipse(ctx,offset*.45,-offset,10*unit,13*unit,'#fff1b2');}
+      if(f.remaining<.6){const offset=f.remaining/.6*height*.7;ctx.strokeStyle='#ffc371';ctx.lineWidth=9*unit;ctx.shadowColor='#ff8c46';ctx.shadowBlur=24;ctx.beginPath();ctx.moveTo(offset*.45,-offset);ctx.lineTo(offset*.45+45*unit,-offset-100*unit);ctx.stroke();const rank=game.skillRank('meteor');ellipse(ctx,offset*.45,-offset,(10+rank*9)*unit,(13+rank*10)*unit,rank===3?'#eadbff':'#fff1b2');if(rank){for(let k=0;k<rank*2;k++){const a=k*Math.PI/rank;ellipse(ctx,offset*.45+Math.cos(a)*35*unit,-offset+Math.sin(a)*35*unit,6*unit,9*unit,'#ffb75f');}}}
     } else if (f.type === 'vortex') {
       ctx.scale(sx, sy); ctx.rotate(-time * 2); ctx.globalAlpha = Math.min(1, f.remaining);
       for (let j = 0; j < 4; j++) { ctx.beginPath(); for (let i = 0; i < 70; i++) { const a = i / 15 + j * Math.PI / 2, r = 10 + i * 2.5; const x = Math.cos(a) * r, y = Math.sin(a) * r; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.strokeStyle = ['#a0d9c055','#b6e2ce30','#6ebda477','#d8f3d52a'][j]; ctx.lineWidth = 3; ctx.stroke(); }
@@ -469,7 +477,7 @@ function drawNet(x, y, swing = 0, opacity = 1) {
   }
   ctx.restore();
   ellipse(ctx, 0, 0, rx, ry); ctx.strokeStyle = '#234e50'; ctx.lineWidth = 7 * unit; ctx.stroke();
-  ctx.strokeStyle = '#a9d8d1'; ctx.lineWidth = 4 * unit; ctx.stroke();
+  ctx.strokeStyle = ['#a9d8d1','#84ffc8','#95caff','#ffe28f'][game.skillRank('net')]; ctx.shadowColor=ctx.strokeStyle;ctx.shadowBlur=reducedMotion?0:game.skillRank('net')*6;ctx.lineWidth = (4+game.skillRank('net')*2) * unit; ctx.stroke();
   ctx.beginPath(); ctx.ellipse(0, 0, rx - unit, ry - unit, 0, Math.PI * 1.04, Math.PI * 1.86); ctx.strokeStyle = '#edfff1'; ctx.lineWidth = 1.5 * unit; ctx.stroke();
   ctx.restore();
 }
@@ -495,6 +503,7 @@ function drawFlamethrower(x, y, firing = false, opacity = 1) {
   ctx.fillStyle='#455d55';ctx.fillRect(-18,105,36,12);ctx.fillStyle='#b6c2a6';ctx.fillRect(-19,101,38,5);ellipse(ctx,0,101,13,4,'#132d31');
   ctx.strokeStyle='#bfa66c';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(17,131);ctx.lineTo(23,131);ctx.lineTo(23,103);ctx.lineTo(9,97);ctx.stroke();
   if(!firing){ellipse(ctx,9,95,3,5,'#73caff');ctx.restore();return;}
+  if(game.skillRank('flame')){drawEvolvedFlame(ctx,{rank:game.skillRank('flame'),time:visualTime,reducedMotion});ctx.restore();return;}
   const flicker=Math.sin(visualTime*39)*9;
   const halo=ctx.createRadialGradient(0,-3,10,0,-3,170);halo.addColorStop(0,'#ffbf4648');halo.addColorStop(1,'#fb6d2200');ellipse(ctx,0,-3,166,153,halo);
   const fire=ctx.createLinearGradient(0,102,0,-157);fire.addColorStop(0,'#b6e9ff');fire.addColorStop(.12,'#fff6bc');fire.addColorStop(.42,game.effectTier('flame')>=3?'#b8f7ff':'#ffe377');fire.addColorStop(.72,game.effectTier('flame')>=3?'#639dff':'#ff933c');fire.addColorStop(1,game.effectTier('flame')>=3?'#805dff00':'#f5522900');
@@ -507,9 +516,11 @@ function drawFlamethrower(x, y, firing = false, opacity = 1) {
 function drawEffects() {
   for (const e of effects) {
     const skill=e.source || ({lightning:'electric',tongue:'frog',sonic:'chorus',sealBurst:'talisman'}[e.type]) || e.type;
-    if(skill!=='flame' || e===effects.findLast(effect=>effect.source==='flame')) skillAura(skill,e.x??e.to?.x??500,e.y??e.to?.y??390,e.radius||(['thunderstorm','dragon'].includes(skill)?260:WEAPONS.find(w=>w.id===skill)?.radius)||60,visualTime,Math.min(1,e.life*3));
+
     const t = 1 - e.life / e.max; ctx.save(); ctx.globalAlpha = Math.min(1, e.life * 5);
-    if(e.type==='sonic'){
+    if(e.type==='bigbang'){
+      drawBigBang(ctx,{t,width,height,rank:game.skillRank('bigbang'),reducedMotion});
+    } else if(e.type==='sonic'){
       ctx.translate(e.x*sx,e.y*sy);ctx.strokeStyle='#c9ee9e';ctx.lineWidth=(1-t)*5+1;
       for(let i=0;i<3;i++){const wave=Math.max(0,t-i*.13);ellipse(ctx,0,0,e.radius*sx*wave,e.radius*sy*wave);ctx.stroke();}
       ctx.fillStyle='#e2f7bc';ctx.font=`bold ${21*unit}px sans-serif`;for(let i=0;i<5;i++){const a=i*Math.PI*.4+t;ctx.fillText(i%2?'♪':'♫',Math.cos(a)*e.radius*sx*t,Math.sin(a)*e.radius*sy*t);}
@@ -524,13 +535,14 @@ function drawEffects() {
     } else if(e.type==='detonate'){
       const r=e.radius*(.25+t);const color=e.source==='meteor'?'#ffb87d':'#d3a1ff';const glow=ctx.createRadialGradient(e.x*sx,e.y*sy,0,e.x*sx,e.y*sy,Math.max(r*sx,r*sy));glow.addColorStop(0,color+'9c');glow.addColorStop(.4,color+'35');glow.addColorStop(1,color+'00');ellipse(ctx,e.x*sx,e.y*sy,r*sx,r*sy,glow);ctx.strokeStyle=color;ctx.lineWidth=(1-t)*7;ctx.stroke();ellipse(ctx,e.x*sx,e.y*sy,r*sx*.7,r*sy*.7);ctx.lineWidth=2;ctx.stroke();
     } else if(e.source==='dragon'){
-      drawDragonKing(ctx, { t, y: e.y*sy, width, unit:unit*(1+game.effectTier('dragon')*.06), reducedMotion });
+      const rank=game.skillRank('dragon');
+      drawDragonSummon(ctx,{t,y:e.y*sy,width,unit,sy,rank,reducedMotion});
     } else if (e.type === 'thunderstorm') {
-      drawThunderstorm(ctx, { t, width, height, strikes:e.strikes, sx, sy, reducedMotion, tier:game.effectTier('thunderstorm') });
+      drawThunderstorm(ctx, { t, width, height, strikes:e.strikes, sx, sy, reducedMotion, tier:game.effectTier('thunderstorm'),rank:game.skillRank('thunderstorm') });
     } else if (e.type === 'lightning') {
       ctx.lineWidth = (2.5+game.effectTier('electric')*.5) * unit; ctx.strokeStyle = game.effectTier('electric')>=3?'#d3c5ff':'#ddfbff'; ctx.shadowColor = '#8eeaff'; ctx.shadowBlur = 12;
       const links = e.links.length ? e.links : [{ from: { x: e.x, y: e.y - 55 }, to: { x: e.x, y: e.y + 55 } }];
-      for (const link of links) { ctx.beginPath(); ctx.moveTo(link.from.x * sx, link.from.y * sy); for (let i = 1; i < 6; i++) { const p = i / 6; ctx.lineTo((link.from.x + (link.to.x - link.from.x) * p + (Math.random() - .5) * 25) * sx, (link.from.y + (link.to.y - link.from.y) * p + (Math.random() - .5) * 25) * sy); } ctx.lineTo(link.to.x * sx, link.to.y * sy); ctx.stroke(); }
+      for (const link of links) { if(game.skillRank('electric')){drawEvolvedBolt(ctx,{...link,rank:game.skillRank('electric'),sx,sy,time:visualTime,reducedMotion});continue;} ctx.beginPath(); ctx.moveTo(link.from.x * sx, link.from.y * sy); for (let i = 1; i < 6; i++) { const p = i / 6; ctx.lineTo((link.from.x + (link.to.x - link.from.x) * p + (Math.random() - .5) * 25) * sx, (link.from.y + (link.to.y - link.from.y) * p + (Math.random() - .5) * 25) * sy); } ctx.lineTo(link.to.x * sx, link.to.y * sy); ctx.stroke(); }
     } else if (e.type === 'tongue') {
       ctx.beginPath(); ctx.moveTo(e.from.x * sx, e.from.y * sy); ctx.lineTo(e.to.x * sx, e.to.y * sy); ctx.strokeStyle = '#e2a0a0'; ctx.lineWidth = 3.5 * unit; ctx.stroke();
     } else if (e.type === 'ripple' || e.source === 'net') {
@@ -541,28 +553,33 @@ function drawEffects() {
     } else if (e.source === 'flame') {
       if(e===effects.findLast(effect=>effect.source==='flame'))drawFlamethrower(e.x*sx,e.y*sy,true);
     } else if (e.source === 'palm') {
+      drawPalmEchoes(ctx,{x:e.x,y:e.y,radius:e.radius,rank:game.skillRank('palm'),sx,sy});
       ctx.save();ctx.translate(e.x*sx,e.y*sy);ctx.rotate(t*.5);ctx.strokeStyle='#efd586';ctx.lineWidth=1.5;for(let j=0;j<3;j++){ellipse(ctx,0,0,(e.radius-25*j)*sx,(e.radius-25*j)*sy);ctx.stroke();}for(let j=0;j<12;j++){const a=j*Math.PI/6;ctx.beginPath();ctx.moveTo(Math.cos(a)*e.radius*.8*sx,Math.sin(a)*e.radius*.8*sy);ctx.lineTo(Math.cos(a)*e.radius*1.04*sx,Math.sin(a)*e.radius*1.04*sy);ctx.stroke();}ctx.restore();
       ellipse(ctx, e.x * sx, e.y * sy, e.radius * sx * (.55 + t), e.radius * sy * (.55 + t)); ctx.strokeStyle = '#f8db80'; ctx.lineWidth = (1 - t) * 8; ctx.stroke();
-      ctx.translate(e.x * sx, e.y * sy - (1 - Math.min(1, t * 4)) * 100 * unit); const size = unit * (1.2 + Math.min(1, t * 4) * .7); ctx.scale(size, size); ctx.shadowColor = '#ffd45d'; ctx.shadowBlur = 30; ctx.fillStyle = '#e6c56bc9'; ctx.strokeStyle = '#fff0b3'; ctx.lineWidth = 1.5;
+      ctx.translate(e.x * sx, e.y * sy - (1 - Math.min(1, t * 4)) * 100 * unit); const size = unit * (1.2 + Math.min(1, t * 4) * .7)*(1+game.skillRank('palm')*.22); ctx.scale(size, size); ctx.shadowColor = '#ffd45d'; ctx.shadowBlur = 30; ctx.fillStyle = '#e6c56bc9'; ctx.strokeStyle = '#fff0b3'; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.moveTo(-37, 43); ctx.lineTo(-69, -1); ctx.bezierCurveTo(-83, -27, -63, -41, -47, -14); ctx.lineTo(-37, 0); ctx.lineTo(-37, -65); ctx.bezierCurveTo(-37, -89, -17, -89, -17, -65); ctx.lineTo(-17, -90); ctx.bezierCurveTo(-17, -110, 4, -110, 4, -89); ctx.lineTo(4, -83); ctx.bezierCurveTo(4, -105, 26, -101, 26, -82); ctx.lineTo(26, -63); ctx.bezierCurveTo(26, -85, 47, -85, 47, -63); ctx.lineTo(47, 26); ctx.bezierCurveTo(47, 77, -22, 90, -37, 43); ctx.closePath(); ctx.fill(); ctx.stroke();
       ctx.shadowBlur = 0; ctx.beginPath(); ctx.moveTo(-22, 8); ctx.quadraticCurveTo(0, -2, 22, 15); ctx.moveTo(-17, -62); ctx.lineTo(-17, -15); ctx.moveTo(4, -80); ctx.lineTo(4, -19); ctx.moveTo(26, -62); ctx.lineTo(26, -10); ctx.stroke();
     }
     ctx.restore();
+    if(!['flame','bigbang'].includes(skill)) skillAura(skill,e.x??e.to?.x??500,e.y??e.to?.y??390,e.radius||(['thunderstorm','dragon'].includes(skill)?260:WEAPONS.find(w=>w.id===skill)?.radius)||60,visualTime,Math.min(1,e.life*5));
   }
 }
 
+let stoppedVisualTime=null;
 function render(time) {
   if (!width || !height) return;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, width, height); ctx.save();
   if (shake > .1) ctx.translate((Math.random() - .5) * shake, (Math.random() - .5) * shake);
   ctx.drawImage(scenery, 0, 0, width, height);
+  if(game.timeStopRemaining>0)drawTimeStop(ctx,{width,height,rank:game.skillRank('timestop')});
   if(game.level>=3){ctx.fillStyle=['','#43102d0c','#39236613','#4717521c','#66002e23'][Math.min(4,Math.floor(game.level/2))];ctx.fillRect(0,0,width,height);}
   // Tiny drifting lights give the scene life without obscuring targets.
   for (let i = 0; i < 16; i++) { const x = (.1 + .8 * ((i * .618) % 1)) * width + Math.sin(time * .23 + i) * 8, y = (.22 + .63 * ((i * .381) % 1)) * height + Math.cos(time * .3 + i) * 7; ellipse(ctx, x, y, 1.2 * unit, 1.2 * unit, `rgba(221,233,146,${.15 + (Math.sin(time + i * 2) + 1) * .15})`); }
   drawFields(time);
-  for (const e of game.enemies) if (stageOf(e) !== 'adult') drawEnemy(e, time);
+  const enemyTime=game.timeStopRemaining>0?(stoppedVisualTime??=time):(stoppedVisualTime=null,time);
+  for (const e of game.enemies) if (stageOf(e) !== 'adult') drawEnemy(e, enemyTime);
   for (const a of game.allies) drawAlly(a, time);
-  for (const e of game.enemies) if (stageOf(e) === 'adult') drawEnemy(e, time);
+  for (const e of game.enemies) if (stageOf(e) === 'adult') drawEnemy(e, enemyTime);
   drawEffects();
   for (const p of particles) { ctx.globalAlpha = Math.min(1, p.life / .35); ellipse(ctx, p.x * sx, p.y * sy, p.size * unit, p.size * unit, p.color); }
   ctx.globalAlpha = 1;
@@ -573,7 +590,7 @@ function render(time) {
     if(selected==='dragon') {
       const top=Math.max(0,pointer.y-w.radius)*sy,bottom=Math.min(700,pointer.y+w.radius)*sy;
       ctx.fillRect(0,top,width,bottom-top);ctx.strokeRect(0,top,width,bottom-top);
-    } else if(selected==='thunderstorm') {
+    } else if(['thunderstorm','timestop','bigbang'].includes(selected)) {
       ctx.fillRect(0,0,width,height);ctx.strokeRect(3,3,width-6,height-6);
     } else if(selected==='meteor') {
       for(let i=0;i<5;i++) {const a=i/4*Math.PI*2,r=i===0?0:85;ellipse(ctx,(pointer.x+Math.cos(a)*r)*sx,(pointer.y+Math.sin(a)*r)*sy,135*game.radiusScale('meteor')*sx,135*game.radiusScale('meteor')*sy);ctx.stroke();}
@@ -609,7 +626,10 @@ function frame(now) {
   }
   render(visualTime); requestAnimationFrame(frame);
 }
-const progression=setupProgression({game,pause:pauseGame,resume:resumeGame,onSelect:p=>{toast(`${p.name} 강화 완료!`);tone(660,.2,'triangle',.08,990);updateHUD();}});
+const progression=setupProgression({game,pause:pauseGame,resume:resumeGame,onSelect:p=>{
+  if(p.weapon){const rank=game.skillRank(p.weapon);announce(`SKILL EVOLUTION · LV ${rank}`,SKILL_FORMS[p.weapon][rank-1],`${p.name} · 새로운 모습으로 각성`);burst(500,390,rank===3?'#ffe7a0':'#b9eaff',48,170);}
+  toast(`${p.name} 강화 완료!`);tone(660,.2,'triangle',.08,990);updateHUD();
+}});
 const medals=setupAchievements({game,mode:()=>runMode,pause:pauseGame,resume:resumeGame,onUnlock:items=>{toast(`훈장 획득! ${items.map(a=>a.name).join(' · ')}`);tone(880,.3,'triangle',.07,1320);}});
 resize(); updateHUD(); requestAnimationFrame(frame);
 

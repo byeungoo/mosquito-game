@@ -1,10 +1,22 @@
+export const SKILL_FORMS = {
+  net:['빛의 그물','빙광 그물','황금 봉인망'],loach:['비취 수호어','창해 수호어','황금 용어'],electric:['분기 뇌격','자색 뇌룡','황금 심판'],
+  flame:['삼중 화염','오중 청염','불사조 백염'],vortex:['격류 회오리','폭풍의 눈','해신의 소용돌이'],frog:['비취 특공대','청해 특공대','왕관 특공대'],
+  freeze:['서리 수정','빙하의 왕관','절대 빙옥'],palm:['연화 신장','거신의 손','천수 연화진'],dragon:['쌍룡 승천','삼룡 뇌해','사해 용왕'],
+  blackhole:['중력 고리','이중 특이점','재앙의 눈'],meteor:['작열 운석','파편 군집','천체 붕괴'],chorus:['오중 합창','칠중 공명','구중 대합창'],
+  rewind:['시간의 고리','이중 시계','삼중 시간진'],talisman:['빛의 부적','봉마 결계','황금 봉인진'],thunderstorm:['분기 낙뢰','자색 폭풍','천벌의 그물'],
+  timestop:['정지된 순간','영원의 경계','시간의 지배자'],bigbang:['초신성','은하 붕괴','우주 창세'],
+};
 export const SKILL_UPGRADES = [
   ['net','대왕 뜰채','net',2],['loach','미꾸라지','fish',2],['electric','전기 방전봉','bolt',2],
   ['flame','화염 방사기','flamethrower',3],['vortex','소용돌이','vortex',4],['frog','개구리 특공대','frog',5],
   ['freeze','절대 영도','snow',6],['palm','여래신장','palm',7],['dragon','용왕 강림','dragon',8],
   ['blackhole','모기 블랙홀','blackhole',9],['meteor','천벌 유성우','meteor',10],
   ['chorus','두꺼비 합창','chorus',4],['rewind','시간 되감기','rewind',5],['talisman','연쇄 부적','talisman',7],['thunderstorm','천뢰난무','bolt',11],
+  ['timestop','타임스톱','rewind',6],['bigbang','빅뱅 어택','bigbang',12],
 ].map(([weapon,name,icon,minWave])=>({id:`skill_${weapon}`,weapon,name:`${name} 진화`,icon,minWave,max:3,category:'기술 진화',description:
+  weapon==='timestop'?'시간 정지 +1초. 신규 출현과 적의 시간이 멈추며 시계 결계가 진화합니다.':
+  weapon==='bigbang'?'전장 전체 피해 +20%. 초신성 → 은하 붕괴 → 우주 창세로 대폭발이 진화합니다.':
+  weapon==='dragon'?'용 1마리 추가! 총 피해 +20%, 반경 +6%. 거대한 파도와 낙뢰가 강화됩니다.':
   weapon==='vortex'?'반경 +6%, 흡입 시간 +1초. 소용돌이의 물결과 회전 날개가 진화합니다.':
   weapon==='freeze'?'반경 +6%, 일반 적 빙결 +0.75초. 얼음 결정과 서리 고리가 진화합니다.':
   weapon==='rewind'?'반경 +6%, 유충 성장 되감기 +2초. 시계와 시간 잔상이 진화합니다.':

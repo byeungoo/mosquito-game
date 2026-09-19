@@ -63,6 +63,9 @@ export class PondAudio {
     const id=e.type==='attack'?e.source:e.type, now=this.ctx.currentTime;
     if(now-(this.last.get(id)??-10)<({flame:.11,kills:.12,hatch:.7,evolve:.5,tongue:.18,sealBurst:.12}[id]||.06))return;
     this.last.set(id,now);
+    if(id==='timestop'){this.tone(1200,.6,'sine',.09,90);this.hiss(2200,.2,.08);}
+    if(id==='bigbangCharge'){this.tone(55,1.2,'sawtooth',.08,880);this.tone(110,1.2,'sine',.12,1200);}
+    if(id==='bigbang'){this.hiss(120,1.4,.3);this.tone(65,1.8,'sine',.25,22);this.tone(880,.8,'triangle',.06,110);}
     if(id==='net'){this.hiss(1600,.12,.17);this.tone(180,.09,'sine',.15,65);}
     if(id==='flame')this.hiss(480,.19,.2);
     if(id==='lightning'){this.hiss(3200,.25,.17);this.tone(120,.18,'sawtooth',.05,1300);}

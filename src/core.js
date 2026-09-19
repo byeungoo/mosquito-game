@@ -36,6 +36,8 @@ export const WEAPONS = [
   { id: 'rewind', key: 'w', unlock: 5, name: '시간 되감기', icon: 'rewind', tag: '시간 마법 · 진화 퇴행', cooldown: 26, radius: 195, description: '변이종은 한 등급 퇴행, 일반 모기는 유충으로! 여왕에게는 2.5초 정지로 적용돼요.', hint: '클릭 · 성장을 되돌려 위험도를 줄이세요' },
   { id: 'talisman', key: 'e', unlock: 7, name: '연쇄 부적', icon: 'talisman', tag: '주술 · 처치 시 연쇄 폭발', cooldown: 21, radius: 200, description: '12초 동안 적에게 부적을 붙여요. 처치하면 주변에 피해 8! 다른 부적도 연쇄 폭발합니다.', hint: '클릭 · 부적을 붙인 뒤 뜰채·번개로 폭발을 시작하세요' },
   { id: 'thunderstorm', key: 'r', unlock: 11, name: '천뢰난무', icon: 'bolt', tag: '필살기 · 전장 전체', cooldown: 45, radius: 1200, damage: 24, description: '연못 전체에 벼락을 쏟아 모든 적에게 피해 24! 재사용 45초. 빙결과 조합하면 더욱 강력해요.', hint: 'R 선택 후 클릭 · 전장 전체에 벼락 / 피해 24' },
+  { id: 'timestop', key: 't', unlock: 6, name: '타임스톱', icon: 'rewind', tag: '시간 정지 · 전장 전체', cooldown: 32, radius: 1200, description: '4초 동안 적의 이동·성장·증식·신규 출현과 붕괴 게이지를 멈춥니다. 아군과 공격은 계속돼요.', hint: 'T 선택 후 클릭 · 전장 전체 시간 정지 4초' },
+  { id: 'bigbang', key: 'b', unlock: 12, name: '빅뱅 어택', icon: 'bigbang', tag: '초필살기 · 우주 대폭발', cooldown: 70, radius: 1200, damage: 65, description: '1.2초간 우주 에너지를 압축한 뒤 전장 전체에 피해 65! 재사용 70초. 빙결과 조합하세요.', hint: 'B 선택 후 클릭 · 1.2초 압축 → 우주 대폭발' },
 ];
 export const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 export const stageOf = e => e.age < 4 ? 'egg' : e.age < 15 ? 'larva' : e.age < 20 ? 'pupa' : 'adult';
@@ -76,6 +78,7 @@ export class PondGame {
   reset() {
     this.status = 'ready'; this.elapsed = 0; this.level = 1; this.kills = 0; this.score = 0; this.bestCombo = 0; this.bossKills = 0;
     this.danger = 0; this.enemies = []; this.allies = []; this.fields = []; this.events = [];
+    this.timeStopRemaining=0;this.pendingSpawns=[];
     this.cooldowns = Object.fromEntries(WEAPONS.map(w => [w.id, 0]));
     this.spawnTimer = .7; this.nextId = 1; this.heat = 0; this.overheated = false; this.flameUntil = 0;
     this.upgrades = {}; this.upgradeOffer = []; this.upgradeWave = 0; this.wardSpent = false;
@@ -91,7 +94,7 @@ export class PondGame {
   get cooldownRate() { return 1 + (this.upgrades.tempo || 0) * .12; }
   skillRank(id) { return Math.min(3,this.upgrades[`skill_${id}`] || 0); }
   skillPower(id) { return 1+this.skillRank(id)*.2; }
-  radiusScale(id) { return ['loach','frog','thunderstorm'].includes(id)?1:1+this.skillRank(id)*.06; }
+  radiusScale(id) { return ['loach','frog','thunderstorm','timestop','bigbang'].includes(id)?1:1+this.skillRank(id)*.06; }
   weaponRadius(id) { const w=WEAPONS.find(w=>w.id===id); return (w.radius + (id==='net' ? (this.upgrades.netcraft || 0)*8 : 0))*this.radiusScale(id); }
   effectTier(id) {
     const specialty={net:'netcraft',flame:'fuel',freeze:'icecraft',loach:'pack',frog:'pack'}[id];
@@ -105,7 +108,7 @@ export class PondGame {
     this.upgradeOffer=[]; this.emit('upgraded',{id,rank:this.upgrades[id]}); return true;
   }
   spawn(age = 0, rank = Math.min(3, Math.floor((this.level - 1) / 3.5))) {
-    if (this.enemies.length >= 240) return null;
+    if (this.enemies.length >= 240 || this.timeStopRemaining>0) return null;
     const angle = this.random() * Math.PI * 2, radius = Math.sqrt(this.random()) * .85;
     const hp = age >= 20 ? EVOLUTIONS[rank].hp : 1 + Math.floor(rank / 2);
     const e = { id: this.nextId++, x: 500 + Math.cos(angle) * 420 * radius, y: 390 + Math.sin(angle) * 245 * radius, age, rank, hp, maxHp: hp, evolve: 0, breed: 0, angle: this.random() * Math.PI * 2, seed: this.random() * 100, frozen: 0, turn: 0, hit: 0, sealed: 0 };
@@ -113,6 +116,11 @@ export class PondGame {
     this.enemies.push(e); return e;
   }
   emit(type, data = {}) { this.events.push({ type, ...data }); }
+  spawnWaveEnemy(age,rank,bossLevel=0) {
+    if(this.timeStopRemaining>0){this.pendingSpawns.push({age,rank,bossLevel});return;}
+    const e=this.spawn(age,rank);
+    if(e && bossLevel){e.hp+=(bossLevel-8)*4;e.maxHp=e.hp;this.emit('boss',{x:e.x,y:e.y});}
+  }
   drainEvents() { return this.events.splice(0); }
   damage(targets, amount, source, x, y) {
     if (!targets.length) return 0;
@@ -172,6 +180,14 @@ export class PondGame {
     const center = { x, y };
     let targets = this.enemies.filter(e => distance(e, center) <= this.weaponRadius(id));
     this.cooldowns[id] = w.cooldown;
+    if(id==='timestop') {
+      this.timeStopRemaining=4+this.skillRank(id);
+      this.emit('timestop',{duration:this.timeStopRemaining,x:500,y:350});return {ok:true};
+    }
+    if(id==='bigbang') {
+      this.fields.push({type:'bigbang',x:500,y:350,remaining:1.2,radius:w.radius});
+      this.emit('bigbangCharge',{x:500,y:350});return {ok:true};
+    }
     if (id === 'thunderstorm') {
       const strikes = this.enemies.map(e => ({ x: e.x, y: e.y }));
       const count = this.damage([...this.enemies], w.damage, id, 500, 390);
@@ -257,6 +273,8 @@ export class PondGame {
   update(delta) {
     if (this.status !== 'playing') return;
     const dt = Math.max(0, Math.min(delta, .1)); this.elapsed += dt;
+    const timeStopped=this.timeStopRemaining>0;
+    if(!timeStopped)for(const spawn of this.pendingSpawns.splice(0))this.spawnWaveEnemy(spawn.age,spawn.rank,spawn.bossLevel);
     if(this.elapsed>this.streakUntil){this.streak=0;this.streakRewards=0;}
     const newLevel = 1 + Math.floor((this.elapsed + 1e-6) / WAVE_SECONDS);
     if (newLevel > this.level) {
@@ -268,9 +286,9 @@ export class PondGame {
       }
       if (this.level >= 3) {
         const rank = Math.max(1, Math.min(3, Math.floor((this.level - 1) / 3)));
-        for (let i = 0; i < Math.min(4, 1 + Math.floor((this.level - 3) / 3)); i++) this.spawn(20, rank);
+        for (let i = 0; i < Math.min(4, 1 + Math.floor((this.level - 3) / 3)); i++) this.spawnWaveEnemy(20, rank);
       }
-      if (this.level >= 8 && (this.level - 8) % 4 === 0) { const queen = this.spawn(20, 4); if (queen) { queen.hp += (this.level - 8) * 4; queen.maxHp = queen.hp; this.emit('boss', { x: queen.x, y: queen.y }); } }
+      if (this.level >= 8 && (this.level - 8) % 4 === 0) this.spawnWaveEnemy(20,4,this.level);
     }
     const nextBoss=8+Math.max(0,Math.ceil((this.level+1-8)/4))*4;
     if(nextBoss===this.level+1 && (1-this.waveProgress)*WAVE_SECONDS<=6 && this.bossWarningWave!==nextBoss) {
@@ -279,8 +297,8 @@ export class PondGame {
     for (const id in this.cooldowns) this.cooldowns[id] = Math.max(0, this.cooldowns[id] - dt * (['net','flame'].includes(id)?1:this.cooldownRate));
     if (this.elapsed > this.flameUntil + 1e-6) this.heat = Math.max(0, this.heat - dt * 22);
     if (this.overheated && this.heat <= 25) this.overheated = false;
-    this.spawnTimer -= dt;
-    if (this.spawnTimer <= 0) {
+    if(!timeStopped)this.spawnTimer -= dt;
+    if (!timeStopped && this.spawnTimer <= 0) {
       const amount = Math.min(10, 3 + Math.floor(this.level / 3));
       for (let i = 0; i < amount; i++) this.spawn(this.random() * 5);
       this.spawnTimer = amount / spawnRateForLevel(this.level);
@@ -289,6 +307,10 @@ export class PondGame {
     for (const f of this.fields) { f.remaining -= dt; if (f.remaining <= 0) expired.push(f); }
     this.fields = this.fields.filter(f => f.remaining > 0);
     for (const f of expired) {
+      if(f.type==='bigbang') {
+        const count=this.damage([...this.enemies],65,'bigbang',500,350);
+        this.emit('bigbang',{x:500,y:350,count});
+      }
       if (f.type === 'blackhole' || f.type === 'meteor') {
         const radius = f.type === 'blackhole' ? 190*this.radiusScale('blackhole') : f.radius, damage = f.type === 'blackhole' ? 32 : 20;
         const count = this.damage(this.enemies.filter(e => distance(e, f) < radius), damage, f.type, f.x, f.y);
@@ -303,7 +325,7 @@ export class PondGame {
         const nearby = this.enemies.filter(e => distance(e, f) <= f.radius);
         const count = this.damage(nearby, 2, 'chorus', f.x, f.y);
         for (const e of nearby) {
-          if (e.hp <= 0) continue;
+          if (e.hp <= 0 || timeStopped) continue;
           const angle = Math.atan2(e.y - f.y, e.x - f.x), push = 24 / (1 + e.rank * .35);
           e.x += Math.cos(angle) * push; e.y += Math.sin(angle) * push;
           if (stageOf(e) !== 'adult') Object.assign(e, pondPoint(e.x, e.y));
@@ -315,6 +337,7 @@ export class PondGame {
     let offspring = 0;
     for (const e of this.enemies) {
       e.hit = Math.max(0, e.hit - dt);
+      if(timeStopped)continue;
       e.sealed = Math.max(0, e.sealed - dt);
       if (e.frozen > 0) { e.frozen = Math.max(0, e.frozen - dt); continue; }
       const previous = stageOf(e); e.age += dt * (1 + Math.min(1.25, (this.level - 1) * .0725));
@@ -369,7 +392,8 @@ export class PondGame {
       }
     }
     separateLoaches(this.allies);
-    this.danger = this.threat >= THREAT_LIMIT ? this.danger + dt : Math.max(0, this.danger - dt * 2);
+    if(!timeStopped)this.danger = this.threat >= THREAT_LIMIT ? this.danger + dt : Math.max(0, this.danger - dt * 2);
+    this.timeStopRemaining=Math.max(0,this.timeStopRemaining-dt);
     if (this.danger >= 5) {
       if(this.upgrades.ward && !this.wardSpent){this.wardSpent=true;this.danger=0;for(const e of this.enemies)e.frozen=Math.max(e.frozen,3);this.emit('ward');}
       else {this.status = 'lost'; this.emit('end');}
