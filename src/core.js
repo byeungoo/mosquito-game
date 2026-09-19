@@ -86,6 +86,9 @@ export class PondGame {
     this.cooldowns = Object.fromEntries(WEAPONS.map(w => [w.id, 0]));
     this.spawnTimer = .7; this.nextId = 1; this.heat = 0; this.overheated = false; this.flameUntil = 0;
     this.upgrades = {}; this.upgradeOffer = []; this.upgradeWave = 0; this.wardSpent = false;
+    this.upgradeQueue=[];this.upgradeSource='wave';this.rerolls=2;this.bossRewardWaves=new Set();
+    this.feverRemaining=0;this.feverTriggered=false;
+    this.combatStats={};
     this.streak = 0; this.bestStreak = 0; this.streakUntil = 0; this.streakRewards = 0; this.bossWarningWave = 0;
     this.comboFeedback = {};
     for (let i = 0; i < 22; i++) this.spawn(this.random() * 15);
@@ -95,7 +98,7 @@ export class PondGame {
   get threat() { return this.enemies.reduce((n, e) => n + (stageOf(e) === 'adult' ? evolutionOf(e).threat : 0), 0); }
   get waveProgress() { return (this.elapsed % WAVE_SECONDS) / WAVE_SECONDS; }
   isUnlocked(id) { return WEAPONS.some(w => w.id === id && this.level >= w.unlock); }
-  get cooldownRate() { return 1 + (this.upgrades.tempo || 0) * .12; }
+  get cooldownRate() { return (1 + (this.upgrades.tempo || 0) * .12)*(this.feverRemaining>0?1.3:1); }
   skillRank(id) { return Math.min(3,this.upgrades[`skill_${id}`] || 0); }
   skillPower(id) { return 1+this.skillRank(id)*.2; }
   radiusScale(id) { return ['loach','frog','thunderstorm','timestop','bigbang'].includes(id)?1:1+this.skillRank(id)*.06; }
@@ -109,7 +112,26 @@ export class PondGame {
     const spec=UPGRADES.find(p=>p.id===id);
     if (!spec || this.level<spec.minWave || (this.upgrades[id] || 0)>=spec.max) return false;
     this.upgrades[id]=(this.upgrades[id] || 0)+1;
-    this.upgradeOffer=[]; this.emit('upgraded',{id,rank:this.upgrades[id]}); return true;
+    this.upgradeOffer=[]; this.emit('upgraded',{id,rank:this.upgrades[id]});this.nextUpgrade(); return true;
+  }
+  queueUpgrade(source='wave') {
+    this.upgradeQueue.push({source,wave:this.level});this.nextUpgrade();
+  }
+  nextUpgrade() {
+    if(this.upgradeOffer.length)return;
+    while(this.upgradeQueue.length){
+      const reward=this.upgradeQueue.shift();
+      const offer=offerUpgrades(this.level,this.upgrades,this.random);
+      if(!offer.length)continue;
+      this.upgradeOffer=offer;this.upgradeWave=reward.wave;this.upgradeSource=reward.source;
+      this.emit('upgradeOffer',{level:reward.wave,source:reward.source});break;
+    }
+  }
+  rerollUpgrade() {
+    if(!['playing','paused'].includes(this.status)||!this.upgradeOffer.length||this.rerolls<=0)return false;
+    const offer=offerUpgrades(this.level,this.upgrades,this.random,this.upgradeOffer);
+    if(offer.length<this.upgradeOffer.length)return false;
+    this.upgradeOffer=offer;this.rerolls--;return true;
   }
   spawn(age = 0, rank = Math.min(3, Math.floor((this.level - 1) / 3.5))) {
     if (this.enemies.length >= 240 || this.timeStopRemaining>0) return null;
@@ -136,10 +158,11 @@ export class PondGame {
       const electric=['electric','thunderstorm'].includes(source);
       if(e.rank===6 && e.shield>0 && electric){e.shield=0;this.emit('shieldBreak',{x:e.x,y:e.y});}
       const armor=e.rank===6 && e.shield>0?.5:1;
-      const hit=base*this.skillPower(source)*(1+(this.upgrades.power || 0)*.12)*(e.frozen>0?1.5+(this.upgrades.icecraft || 0)*.15:1)*(e.rank>=3&&stageOf(e)==='adult'?1+(this.upgrades.hunter || 0)*.25:1)*(conductive?1.25:1)*armor;
+      const hit=base*this.skillPower(source)*(1+(this.upgrades.power || 0)*.12)*(e.frozen>0?1.5+(this.upgrades.icecraft || 0)*.15:1)*(e.rank>=3&&stageOf(e)==='adult'?1+(this.upgrades.hunter || 0)*.25:1)*(conductive?1.25:1)*armor*(this.feverRemaining>0?1.2:1);
       if(conductive) combos.set('conductive',e);
       if(e.frozen>0) combos.set('frozen',e);
-      e.hp -= hit; e.hit = .15;
+      const stats=this.combatStats[source]??={damage:0,kills:0};stats.damage+=Math.min(Math.max(0,e.hp),hit);
+      e.hp -= hit; e.hit = .15;if(e.hp<=0)stats.kills++;
       if (e.hp <= 0) dead.push(e); else alive.push({ x: e.x, y: e.y, amount: hit, rank: e.rank });
     }
     for(const [kind,e] of combos) if(this.elapsed >= (this.comboFeedback[kind] ?? -Infinity)) {
@@ -150,9 +173,13 @@ export class PondGame {
     if (!dead.length) return 0;
     const ids = new Set(dead.map(e => e.id)); this.enemies = this.enemies.filter(e => !ids.has(e.id));
     this.kills += dead.length; this.bestCombo = Math.max(this.bestCombo, dead.length);
-    for (const e of dead) { this.score += stageOf(e) === 'adult' ? evolutionOf(e).points : 1 + e.rank; if (e.rank >= 4 && stageOf(e) === 'adult') { this.bossKills++; this.emit('bossKilled', { x: e.x, y: e.y, rank:e.rank }); } }
-    if (this.elapsed > this.streakUntil) { this.streak=0; this.streakRewards=0; }
+    for (const e of dead) { this.score += stageOf(e) === 'adult' ? evolutionOf(e).points : 1 + e.rank; if (e.rank >= 4 && stageOf(e) === 'adult') {
+      this.bossKills++;this.emit('bossKilled', { x: e.x, y: e.y, rank:e.rank });
+      if(!this.bossRewardWaves.has(this.level)){this.bossRewardWaves.add(this.level);this.rerolls=Math.min(3,this.rerolls+1);this.queueUpgrade('boss');this.emit('bossLoot',{x:e.x,y:e.y});}
+    } }
+    if (this.elapsed > this.streakUntil) { this.streak=0; this.streakRewards=0;this.feverTriggered=false; }
     this.streak+=dead.length; this.bestStreak=Math.max(this.bestStreak,this.streak); this.streakUntil=this.elapsed+4;
+    if(this.streak>=24 && !this.feverTriggered){this.feverTriggered=true;this.feverRemaining=6;this.emit('fever',{x,y,duration:6});}
     const rewards=Math.min(3,Math.floor(this.streak/12)), earned=rewards-this.streakRewards;
     if(earned>0) {
       this.streakRewards=rewards; this.score+=earned*15;
@@ -283,15 +310,13 @@ export class PondGame {
     const dt = Math.max(0, Math.min(delta, .1)); this.elapsed += dt;
     const timeStopped=this.timeStopRemaining>0;
     if(!timeStopped)for(const spawn of this.pendingSpawns.splice(0))this.spawnWaveEnemy(spawn.age,spawn.rank,spawn.bossLevel);
-    if(this.elapsed>this.streakUntil){this.streak=0;this.streakRewards=0;}
+    this.feverRemaining=Math.max(0,this.feverRemaining-dt);
+    if(this.elapsed>this.streakUntil){this.streak=0;this.streakRewards=0;this.feverTriggered=false;}
     const newLevel = 1 + Math.floor((this.elapsed + 1e-6) / WAVE_SECONDS);
     if (newLevel > this.level) {
       this.level = newLevel;
       this.emit('wave', { level: this.level, unlocked: WEAPONS.filter(w => w.unlock === this.level).map(w => w.id) });
-      if((this.level-2)%3===0 && !this.upgradeOffer.length) {
-        this.upgradeOffer=offerUpgrades(this.level,this.upgrades,this.random);this.upgradeWave=this.level;
-        if(this.upgradeOffer.length)this.emit('upgradeOffer',{level:this.level});
-      }
+      if((this.level-2)%3===0)this.queueUpgrade('wave');
       if (this.level >= 3) {
         const rank = Math.max(1, Math.min(3, Math.floor((this.level - 1) / 3)));
         for (let i = 0; i < Math.min(4, 1 + Math.floor((this.level - 3) / 3)); i++) this.spawnWaveEnemy(20, rank);
@@ -361,6 +386,8 @@ export class PondGame {
         if (e.rank >= 3 && e.rank <= 4) { e.breed += dt; if (e.breed >= 8.5) { e.breed = 0; offspring += e.rank === 4 ? 4 : 2; this.emit('breed', { x: e.x, y: e.y }); } }
         e.rage=Math.max(0,(e.rage||0)-dt);e.shield=Math.max(0,(e.shield||0)-dt);
         if(e.rank>=5){
+          const period=e.rank===5?7:9;
+          if(e.bossTimer<period-1.2 && e.bossTimer+dt>=period-1.2)this.emit('bossWindup',{x:e.x,y:e.y,rank:e.rank});
           e.bossTimer=(e.bossTimer||0)+dt;
           if(e.bossTimer>=(e.rank===5?7:9)){
             e.bossTimer=0;

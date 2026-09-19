@@ -35,8 +35,8 @@ export const UPGRADES = [
   { id: 'ward', name: '연못의 가호', icon: 'talisman', minWave: 5, max: 1, category: '최후의 방어', description: '이번 판에 한 번, 붕괴를 막고 위험 게이지를 초기화하며 모든 적을 3초간 얼립니다.' },
 ];
 
-export function offerUpgrades(level, owned, random) {
-  const pool = UPGRADES.filter(p => p.minWave <= level && (owned[p.id] || 0) < p.max);
+export function offerUpgrades(level, owned, random, excluded=[]) {
+  const pool = UPGRADES.filter(p => !excluded.includes(p.id) && p.minWave <= level && (owned[p.id] || 0) < p.max);
   // Fisher–Yates without changing the shared catalog.
   for(let i=pool.length-1;i>0;i--) {
     const j=Math.min(i,Math.floor(random()*(i+1)));

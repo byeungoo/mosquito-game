@@ -52,6 +52,7 @@
         <div id="boss-hud" class="boss-hud hidden"><span>♛ 재앙의 여왕</span><div><i id="boss-health"></i></div><b id="boss-hp-text"></b></div>
         <div id="toast" class="toast" role="status" aria-live="polite"></div>
         <div id="time-stop-hud" class="time-stop-hud" hidden></div>
+        <div id="fever-hud" class="fever-hud" hidden><strong>FEVER</strong><span></span></div>
         <div id="streak-hud" class="streak-hud hidden"><b id="streak-value">0 CHAIN</b><span>4초 안에 이어 잡기</span><div><i id="streak-bar"></i></div></div>
         <div id="heat-hud" class="heat-hud hidden"><span id="heat-label"></span><div><i id="heat-bar"></i></div></div>
         <div class="arena-bottom"><span id="weapon-hint">도구를 골라 연못을 지켜주세요</span><span class="weather" id="score-label">SCORE 0000</span></div>
@@ -71,7 +72,7 @@
         </div>
 
         <div class="overlay hidden" id="pause-overlay"><div class="dialog-card"><span class="eyebrow">TAKE A BREATHER</span><h2>잠깐, 숨 고르기</h2><p>연못도 함께 쉬고 있어요.</p><button id="resume-btn" class="primary-btn">계속 지키기 <span>→</span></button><button id="restart-pause-btn" class="text-btn">처음부터 다시</button></div></div>
-        <div class="overlay hidden" id="result-overlay"><div class="dialog-card"><span class="eyebrow" id="result-eyebrow">THE POND HAS FALLEN</span><h2 id="result-title">연못이 무너졌습니다</h2><p id="result-description"></p><div class="result-score" id="result-score">0</div><span class="eyebrow">FINAL SCORE</span><div class="result-stats"><div><span>도달 단계</span><strong id="result-level">1</strong></div><div><span>퇴치 수</span><strong id="result-kills">0</strong></div><div><span>생존 시간</span><strong id="result-time">0:00</strong></div></div><p id="result-best" class="record-note"></p><button id="restart-btn" class="primary-btn">더 멀리 도전하기 <span>↻</span></button><button id="result-share-btn" class="text-btn">&#44592;&#47197; &#44277;&#50976; &#8599;</button><button id="mode-menu-btn" class="text-btn">&#47784;&#46300; &#49440;&#53469;</button></div></div>
+        <div class="overlay hidden" id="result-overlay"><div class="dialog-card"><span class="eyebrow" id="result-eyebrow">THE POND HAS FALLEN</span><h2 id="result-title">연못이 무너졌습니다</h2><p id="result-description"></p><div class="result-score" id="result-score">0</div><span class="eyebrow">FINAL SCORE</span><div class="result-stats"><div><span>도달 단계</span><strong id="result-level">1</strong></div><div><span>퇴치 수</span><strong id="result-kills">0</strong></div><div><span>생존 시간</span><strong id="result-time">0:00</strong></div></div><div id="combat-report" class="combat-report" aria-label="주력 기술"></div><p id="result-target" class="result-target"></p><p id="result-best" class="record-note"></p><button id="restart-btn" class="primary-btn">더 멀리 도전하기 <span>↻</span></button><button id="result-share-btn" class="text-btn">&#44592;&#47197; &#44277;&#50976; &#8599;</button><button id="mode-menu-btn" class="text-btn">&#47784;&#46300; &#49440;&#53469;</button></div></div>
       </div>
 
       <nav class="quick-arsenal" aria-label="모바일 빠른 무기 선택"><div class="quick-heading"><strong id="quick-name">대왕 뜰채</strong><span id="quick-status">사용 준비 완료</span></div><div id="quick-weapons" class="quick-weapons"></div></nav>
@@ -97,6 +98,8 @@
 <li>절대 영도에 얼린 적은 피해를 <b>1.5배</b> 받습니다. 여왕의 빙결은 더 빨리 풀립니다.</li>
 <li><b>Q 두꺼비 합창</b>은 반복 충격파, <b>W 시간 되감기</b>는 성장·진화 퇴행, <b>E 연쇄 부적</b>은 처치 시 주변으로 번지는 폭발입니다.</li>
 <li><b>W2, W5, W8…</b>에서 세 가지 중 하나의 강화를 선택하세요. 기술 진화 17종은 같은 기술을 <b>3회까지</b> 강화할 수 있습니다. 위력·범위 또는 제어 능력이 증가하고 이펙트가 진화합니다. 강화 중인 기술은 다음 선택지에 우선 등장합니다.</li>
+<li><b>보스 처치 보상</b>: 웨이브마다 첫 보스를 처치하면 추가 강화 1개와 다시 뽑기 1회(최대 3회)를 얻습니다. 미룬 강화는 쌓아둘 수 있습니다. 다시 뽑기는 매 판 2회로 시작하며 현재 카드와 다른 선택지가 나옵니다.</li>
+<li><b>24연속 처치 피버</b>: 6초간 모든 피해 +20%, 스킬 재충전 속도 +30%. 같은 연속 처치에서는 한 번 발동하며, 뜰채·화염의 재사용 간격과 지원군 공격 주기는 유지됩니다.</li>
 <li>웨이브가 높아지면 기술의 기본 연출도 강해집니다. 강화 선택 중에는 시간이 멈추며, 기술 진화와 공통 강화는 이번 판 동안 적용됩니다.</li>
 <li><b>4초 안에 이어 처치</b>하면 CHAIN이 쌓입니다. 12·24·36연속 처치마다 점수 +15, 공격 스킬 대기시간 1초 회복! 지원군 소환은 제외됩니다.</li>
 <li><b>소용돌이 → 전기 방전봉 / 천뢰난무</b>: 소용돌이 범위 안의 적에게 전기 피해가 25% 증가합니다. 빙결 보너스와 함께 적용됩니다.</li>
@@ -126,7 +129,7 @@
   <dialog id="upgrade-dialog" aria-labelledby="upgrade-title" aria-describedby="upgrade-wave">
     <span class="eyebrow">THE POND STRIKES BACK</span><h2 id="upgrade-title">이번에는, 당신이 진화할 차례.</h2>
     <p id="upgrade-wave"></p><div id="upgrade-options"></div>
-    <div class="upgrade-footer"><span>선택하는 동안 연못은 안전하게 멈춥니다.</span><button id="upgrade-later" class="text-btn">나중에 선택</button></div>
+    <div class="upgrade-footer"><span>선택 중에는 전투가 멈춥니다.</span><button id="upgrade-reroll" class="text-btn">다시 뽑기 · 2회</button><button id="upgrade-later" class="text-btn">나중에 선택</button></div>
   </dialog>
   <dialog id="medals-dialog" aria-labelledby="medals-title"><button id="close-medals-btn" class="close-btn" aria-label="훈장 닫기">×</button><span class="eyebrow">POND DEFENSE HONORS</span><h2 id="medals-title">당신이 지킨 밤의 기록.</h2><p>새로운 목표에 도전해 훈장 6개를 모으세요. 획득 기록은 이 기기에 저장됩니다.</p><div id="medals-list"></div></dialog>
   <script type="module" src="./src/game.js"></script>

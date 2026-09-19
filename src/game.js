@@ -160,6 +160,12 @@ function endGame() {
   $('result-kills').textContent = game.kills; $('result-time').textContent = formatTime(game.elapsed);
   const record=challenge?dailyRecords[challenge.date]:best;
   $('result-best').textContent = `${newBest ? '✦ 새로운 최고 기록! · ' : ''}${challenge?challenge.date+' 오늘의 연못 · ':''}최고 ${record.score}점 / WAVE ${record.level}`;
+  const leaders=Object.entries(game.combatStats).filter(([,s])=>s.damage>0).sort((a,b)=>b[1].damage-a[1].damage).slice(0,3);
+  $('combat-report').replaceChildren();
+  for(const [id,stats] of leaders){const row=document.createElement('div'),name=document.createElement('span'),value=document.createElement('b');name.textContent=WEAPONS.find(w=>w.id===id)?.name||id;value.textContent=`피해 ${Math.round(stats.damage).toLocaleString()} · ${stats.kills}마리`;row.append(name,value);$('combat-report').append(row);}
+  $('combat-report').hidden=!leaders.length;
+  const nextWeapon=WEAPONS.filter(w=>w.unlock>game.level).sort((a,b)=>a.unlock-b.unlock)[0];
+  $('result-target').textContent=nextWeapon?`다음 목표 · W${nextWeapon.unlock} ${nextWeapon.name} 해금`:game.level<16?'다음 목표 · W16 모기 티라노 격파':game.level<20?'다음 목표 · W20 모기 로봇 격파':`다음 목표 · W${game.level+1} 돌파 / 24연속 처치로 피버 발동`;
   $('restart-btn').firstChild.textContent=challenge?'오늘의 연못 재도전 ':'더 멀리 도전하기 ';
   $('result-overlay').classList.remove('hidden'); $('restart-btn').focus({ preventScroll: true });
   tone(220, .5, 'triangle', .06, 75);
@@ -170,6 +176,8 @@ function formatTime(time) { const sec = Math.floor(time); return `${String(Math.
 function updateHUD() {
   $('time-value').textContent = formatTime(game.elapsed);
   $('time-stop-hud').hidden=game.timeStopRemaining<=0;
+  $('fever-hud').hidden=game.feverRemaining<=0;
+  $('fever-hud').querySelector('span').textContent=`${game.feverRemaining.toFixed(1)}초 · 피해 +20% / 재충전 +30%`;
   $('time-stop-hud').textContent=`시간 정지 · ${game.timeStopRemaining.toFixed(1)}초`;
   $('streak-hud').classList.toggle('hidden',game.streak<3 || game.status==='ready' || game.status==='lost');
   $('streak-value').textContent=`${game.streak} CHAIN`;
@@ -191,7 +199,7 @@ function updateHUD() {
   $('unlock-count').innerHTML = `${String(WEAPONS.filter(w=>game.isUnlocked(w.id)).length).padStart(2,'0')}<span>/${WEAPONS.length}</span>`;
   const w = WEAPONS.find(w => w.id === selected), cd = game.cooldowns[selected] / (['net','flame'].includes(selected)?1:game.cooldownRate);
   if(game.isUnlocked(selected)) {
-    const power=(1+(game.upgrades.power||0)*.12)*game.skillPower(selected);
+    const power=(1+(game.upgrades.power||0)*.12)*game.skillPower(selected)*(game.feverRemaining>0?1.2:1);
     $('detail-tag').textContent=selected==='net'?`뜰채 피해 ${Number(((1+(game.upgrades.netcraft||0))*power).toFixed(2))} · 반경 ${game.weaponRadius('net')}`:selected==='flame'?`초당 피해 ${Number((w.dps*power).toFixed(1))} · 연속 분사 ${(4/(1-(game.upgrades.fuel||0)*.15)).toFixed(1)}초`:w.tag;
     $('detail-cooldown').textContent=selected==='flame'?'누르는 동안 지속 피해':`재사용 ${(w.cooldown/(['net','flame'].includes(selected)?1:game.cooldownRate)).toFixed(1)}초`;
     if(selected==='flame')$('weapon-hint').textContent=`누른 채 유지 / 드래그 · 초당 피해 ${Number((w.dps*power).toFixed(1))} · 과열 주의`;
@@ -225,7 +233,7 @@ function updateHUD() {
   const bosses=game.enemies.filter(e=>e.rank>=4 && stageOf(e)==='adult');
   const boss=bosses.reduce((best,e)=>!best||e.rank>best.rank?e:best,null);
   $('boss-hud').classList.toggle('hidden', !boss);
-  if (boss) { $('boss-hud').querySelector('span').textContent=`${evolutionOf(boss).name}${boss.shield>0?' · 보호막':boss.rage>0?' · 폭주':''}${bosses.length>1?` 외 ${bosses.length-1}`:''}`;$('boss-health').style.background=evolutionOf(boss).color;$('boss-health').style.width = `${Math.max(0,boss.hp / boss.maxHp * 100)}%`; $('boss-hp-text').textContent = `${Math.ceil(boss.hp)} / ${boss.maxHp}`; }
+  if (boss) { const windup=boss.rank>=5 && boss.bossTimer>=(boss.rank===5?5.8:7.8);$('boss-hud').querySelector('span').textContent=`${evolutionOf(boss).name}${windup?' · 준비!':boss.shield>0?' · 보호막':boss.rage>0?' · 폭주':''}${bosses.length>1?` 외 ${bosses.length-1}`:''}`;$('boss-health').style.background=evolutionOf(boss).color;$('boss-health').style.width = `${Math.max(0,boss.hp / boss.maxHp * 100)}%`; $('boss-hp-text').textContent = `${Math.ceil(boss.hp)} / ${boss.maxHp}`; }
   $('field-note').innerHTML = tips[Math.floor(game.elapsed / 20) % tips.length];
 }
 
@@ -253,6 +261,9 @@ function processEvents() {
       burst(e.x,e.y,color,12,85);
     }
     if(e.type==='upgradeOffer')progression.open();
+    if(e.type==='bossLoot')toast('보스 전리품! 추가 강화 +1 · 다시 뽑기 충전');
+    if(e.type==='bossWindup'){toast(e.rank===5?'티라노가 숨을 들이쉽니다! 빙결로 포효를 늦추세요':'로봇 보호막 충전 중! 전기 공격을 준비하세요');tone(260,.15,'sine',.05,520);}
+    if(e.type==='fever'){announce('24 CHAIN · FEVER','연못의 역습','6초간 피해 +20% · 스킬 재충전 +30%');burst(e.x,e.y,'#ffdc79',50,160);tone(440,.4,'triangle',.08,1320);}
     if(e.type==='bossWarning'){announce('DANGER APPROACHING', `6초 뒤 ${EVOLUTIONS[e.rank??4].name}`, e.rank===6?'전기 공격으로 보호막을 깨뜨리세요':'절대 영도와 궁극기를 준비하세요');tone(440,.2,'triangle',.08,180);}
     if(e.type==='bossRoar' || e.type==='bossShield' || e.type==='shieldBreak'){
       effects.push({...e,life:1.1,max:1.1});burst(e.x,e.y,e.type==='bossRoar'?'#ffad61':'#91eaff',22,100);
@@ -371,6 +382,7 @@ function drawEnemy(e, time) {
   const stage = stageOf(e), x = e.x * sx, y = e.y * sy;
   const mutation = evolutionOf(e), size = stage === 'adult' ? mutation.scale : 1 + e.rank * .12;
   if(e.sealed>0){ctx.save();ctx.translate(x+13*unit,y-15*unit);ctx.rotate(.2+Math.sin(time*4+e.seed)*.12);ctx.fillStyle='#f5d788';ctx.fillRect(-4*unit,-8*unit,9*unit,19*unit);ctx.strokeStyle='#b44536';ctx.lineWidth=1.2*unit;ctx.beginPath();ctx.moveTo(0,-5*unit);ctx.lineTo(0,7*unit);ctx.moveTo(-2*unit,-2*unit);ctx.lineTo(3*unit,-2*unit);ctx.moveTo(-3*unit,3*unit);ctx.lineTo(3*unit,3*unit);ctx.stroke();ctx.restore();}
+  if(e.rank>=5){const period=e.rank===5?7:9,progress=Math.max(0,(e.bossTimer-(period-1.2))/1.2);if(progress>0){ctx.save();ctx.strokeStyle='#ffe19c';ctx.lineWidth=3*unit;ctx.beginPath();ctx.arc(x,y,32*size*unit,-Math.PI/2,-Math.PI/2+Math.PI*2*progress);ctx.stroke();ctx.restore();}}
   if (stage === 'adult' && (e.rank > 0 || e.hp < e.maxHp)) {
     const bar = (e.rank >= 4 ? 60 : 31) * unit, ybar = y - (18 * size + 8) * unit;
     ctx.fillStyle='#0a182bd0';ctx.fillRect(x-bar/2,ybar,bar,3*unit);ctx.fillStyle=mutation.color;ctx.fillRect(x-bar/2,ybar,bar*Math.max(0,e.hp/e.maxHp),3*unit);
@@ -579,6 +591,7 @@ function render(time) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, width, height); ctx.save();
   if (shake > .1) ctx.translate((Math.random() - .5) * shake, (Math.random() - .5) * shake);
   ctx.drawImage(scenery, 0, 0, width, height);
+  if(game.feverRemaining>0){ctx.save();ctx.strokeStyle='#ffd878';ctx.lineWidth=6;ctx.shadowColor='#ffac4b';ctx.shadowBlur=reducedMotion?0:18;ctx.strokeRect(3,3,width-6,height-6);ctx.restore();}
   if(game.timeStopRemaining>0)drawTimeStop(ctx,{width,height,rank:game.skillRank('timestop')});
   if(game.level>=3){ctx.fillStyle=['','#43102d0c','#39236613','#4717521c','#66002e23'][Math.min(4,Math.floor(game.level/2))];ctx.fillRect(0,0,width,height);}
   // Tiny drifting lights give the scene life without obscuring targets.
