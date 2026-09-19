@@ -24,7 +24,8 @@ export function setupProgression({game,pause,resume,onSelect}) {
     for(const id of game.upgradeOffer) {
       const p=UPGRADES.find(p=>p.id===id),button=document.createElement('button');
       button.className='upgrade-option';button.type='button';
-      button.innerHTML=`<span class="upgrade-category">${p.category}</span><svg aria-hidden="true"><use href="#i-${p.icon}"/></svg><strong>${p.name}</strong><span class="upgrade-rank">LV ${(game.upgrades[id]||0)+1} / ${p.max}</span><span class="upgrade-description">${p.description}</span><span class="upgrade-choose">이 강화 선택 →</span>`;
+      const current=game.upgrades[id]||0,next=current+1;
+      button.innerHTML=`<span class="upgrade-category">${p.category}${p.weapon?' · 이펙트 진화':''}</span><svg aria-hidden="true"><use href="#i-${p.icon}"/></svg><strong>${p.name}</strong><span class="upgrade-rank">LV ${current} → ${next} / ${p.max}</span><span class="upgrade-description">${p.description}${p.weapon?`<br><b>${['','빛의 각성','강화 잔상','최종 진화'][next]}</b> · 같은 기술을 3회까지 강화`:''}</span><span class="upgrade-choose">이 강화 선택 →</span>`;
       button.addEventListener('click',()=>{
         if(!game.chooseUpgrade(id))return;
         refresh();dialog.close();onSelect(p);

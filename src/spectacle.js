@@ -43,7 +43,7 @@ export function drawDragonKing(c, { t, y, width, unit: u, reducedMotion }) {
   c.restore();c.restore();
 }
 
-export function drawThunderstorm(c, { t, width, height, strikes, sx, sy, reducedMotion }) {
+export function drawThunderstorm(c, { t, width, height, strikes, sx, sy, reducedMotion, tier=0 }) {
   c.save();c.fillStyle=`rgba(14,20,49,${Math.sin(t*Math.PI)*.25})`;c.fillRect(0,0,width,height);
   const points=[...strikes.slice(0,32),...Array.from({length:18},(_,i)=>({x:40+(i*157)%920,y:190+(i*113)%430}))];
   c.lineJoin='round';c.shadowColor='#95bdff';c.shadowBlur=reducedMotion?0:14;
@@ -53,7 +53,7 @@ export function drawThunderstorm(c, { t, width, height, strikes, sx, sy, reduced
     const x=point.x*sx,y=point.y*sy;
     c.globalAlpha*=1-age/.5;c.beginPath();c.moveTo(x-30*sx,0);
     for(let k=1;k<9;k++)c.lineTo(x+Math.sin(i*7+k*9)*(k===8?0:26)*sx,y*k/8);
-    c.strokeStyle='#638fff';c.lineWidth=7*sx;c.stroke();c.strokeStyle='#e7f8ff';c.lineWidth=2*sx;c.stroke();
+    c.strokeStyle=tier>=3?'#a88aff':'#638fff';c.lineWidth=(7+tier)*sx;c.stroke();c.strokeStyle='#e7f8ff';c.lineWidth=(2+tier*.3)*sx;c.stroke();
     c.beginPath();c.ellipse(x,y,(12+age*90)*sx,(4+age*28)*sy,0,0,Math.PI*2);c.strokeStyle='#adccff';c.lineWidth=1.5;c.stroke();
     c.globalAlpha=1;
   });c.restore();

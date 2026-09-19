@@ -1,4 +1,5 @@
 import { PondAudio } from './audio.js';
+import { drawSkillEvolution } from './skill-effects.js';
 import { bindPondPointer } from './pointer.js';
 import { dailyChallenge, seededRandom, saveDailyRecord } from './daily.js';
 import { setupAchievements } from './achievements.js';
@@ -43,6 +44,7 @@ for (const [index, w] of WEAPONS.entries()) {
   button.dataset.weapon = w.id; button.title = `${w.name} (${w.key}) · WAVE ${w.unlock} 해금 · ${w.description}`;
   button.setAttribute('aria-label', `${w.key}. ${w.name}`);
   button.innerHTML = `<span class="keycap">${w.key.toUpperCase()}</span><svg aria-hidden="true"><use href="#i-${w.icon}"/></svg><span class="weapon-name">${w.name}</span><span class="cooldown-label"></span><span class="cooldown-shade"></span><span class="lock-label">W${String(w.unlock).padStart(2,'0')} 해금</span>`;
+  const rank=document.createElement('span');rank.className='skill-rank';rank.hidden=true;button.append(rank);
   button.addEventListener('click', () => selectWeapon(w.id));
   $('weapon-grid').append(button);
   const quick = button.cloneNode(true);
@@ -61,8 +63,6 @@ function selectWeapon(id) {
   $('detail-cooldown').textContent = id === 'flame' ? '연속 분사 · 과열 주의' : `재사용 ${weapon.cooldown}초`;
   $('weapon-hint').textContent = game.isUnlocked(id) ? weapon.hint : `아직 잠겨 있어요 · WAVE ${weapon.unlock} 도달 시 해금`;
   $('quick-name').textContent = weapon.name;
-  const quick = weaponButtons.find(b => b.classList.contains('quick-weapon') && b.dataset.weapon === id);
-  if (quick && !quick.hidden) $('quick-weapons').scrollTo({left:Math.max(0,quick.offsetLeft-100),behavior:reducedMotion?'instant':'smooth'});
   tone(420, .03, 'sine', .025);
   if(pondInput) updateHUD();
 }
@@ -188,13 +188,25 @@ function updateHUD() {
   $('unlock-count').innerHTML = `${String(WEAPONS.filter(w=>game.isUnlocked(w.id)).length).padStart(2,'0')}<span>/${WEAPONS.length}</span>`;
   const w = WEAPONS.find(w => w.id === selected), cd = game.cooldowns[selected] / (['net','flame'].includes(selected)?1:game.cooldownRate);
   if(game.isUnlocked(selected)) {
-    const power=1+(game.upgrades.power||0)*.12;
+    const power=(1+(game.upgrades.power||0)*.12)*game.skillPower(selected);
     $('detail-tag').textContent=selected==='net'?`뜰채 피해 ${Number(((1+(game.upgrades.netcraft||0))*power).toFixed(2))} · 반경 ${game.weaponRadius('net')}`:selected==='flame'?`초당 피해 ${Number((w.dps*power).toFixed(1))} · 연속 분사 ${(4/(1-(game.upgrades.fuel||0)*.15)).toFixed(1)}초`:w.tag;
     $('detail-cooldown').textContent=selected==='flame'?'누르는 동안 지속 피해':`재사용 ${(w.cooldown/(['net','flame'].includes(selected)?1:game.cooldownRate)).toFixed(1)}초`;
+    if(selected==='flame')$('weapon-hint').textContent=`누른 채 유지 / 드래그 · 초당 피해 ${Number((w.dps*power).toFixed(1))} · 과열 주의`;
+    else if(selected==='net')$('weapon-hint').textContent=`클릭 / 드래그 · 피해 ${Number(((1+(game.upgrades.netcraft||0))*power).toFixed(1))} · 성충도 공격 가능`;
+    else {
+      const base=w.damage??({chorus:2,talisman:8}[selected]);
+      if(base)$('detail-tag').textContent=`피해 ${Number((base*power).toFixed(1))}${selected==='thunderstorm'?' · 전장 전체':` · 반경 ${Math.round(game.weaponRadius(selected))}`}`;
+    }
   }
   const allyCount = ALLY_LIMITS[selected] ? game.allies.filter(a => a.type === selected).length : 0;
   $('detail-status').textContent = !game.isUnlocked(selected) ? `WAVE ${w.unlock} 해금` : ALLY_LIMITS[selected] ? `${allyCount}/${ALLY_LIMITS[selected]}마리 · ${allyCount >= ALLY_LIMITS[selected] ? '배치 완료' : cd > 0 ? `${Math.ceil(cd)}초` : '배치 가능'}` : selected === 'flame' ? `${game.overheated ? '냉각 중' : '열기'} ${Math.round(game.heat)}%` : cd > 0 ? `${cd.toFixed(1)}초 후 준비` : '사용 준비 완료';
   $('quick-status').textContent = $('detail-status').textContent;
+  const mastery=game.skillRank(selected);
+  $('quick-name').textContent=`${w.name}${mastery?` · LV ${mastery}`:''}`;
+  if(mastery){
+    const control=['vortex','freeze','rewind'].includes(selected),damage=control?'제어 강화':`피해 +${mastery*20}%`;
+    $('detail-tag').textContent+=` · 진화 ${mastery}/3 (${damage})`;
+  }
   $('heat-hud').classList.toggle('hidden',selected!=='flame' || !['playing','paused'].includes(game.status));
   $('heat-hud').classList.toggle('overheated',game.overheated);
   $('heat-label').textContent = game.overheated?'과열 · 25%까지 냉각 중':`화염 연료 열기 ${Math.round(game.heat)}%`;
@@ -202,7 +214,7 @@ function updateHUD() {
   for (const button of weaponButtons) {
     const id = button.dataset.weapon, cooldown = game.cooldowns[id], spec = WEAPONS.find(w => w.id === id);
     const locked = !game.isUnlocked(id); button.classList.toggle('locked', locked); button.setAttribute('aria-disabled', String(locked));
-    if(button.classList.contains('quick-weapon')) button.hidden=locked;
+    const rank=game.skillRank(id),badge=button.querySelector('.skill-rank');badge.hidden=!rank;badge.textContent=`+${rank}`;button.dataset.mastery=rank;
     const label = button.querySelector('.cooldown-label');
     if (id === 'flame') { label.textContent = game.heat > 0 ? `${Math.round(game.heat)}°` : ''; button.querySelector('.cooldown-shade').style.height = `${game.heat}%`; }
     else { label.textContent = cooldown > .1 ? `${Math.ceil(cooldown/(id==='net'?1:game.cooldownRate))}s` : ''; button.querySelector('.cooldown-shade').style.height = `${cooldown / spec.cooldown * 100}%`; }
@@ -385,6 +397,7 @@ function drawEnemy(e, time) {
 }
 
 function drawAlly(a, time) {
+  skillAura(a.type,a.x,a.y,32, time,.65);
   ctx.save(); ctx.translate(a.x * sx, a.y * sy); ctx.scale(unit, unit);
   if (a.type === 'loach') {
     ctx.rotate(a.angle); const growth = 1 + Math.min(a.eaten, 20) * .014; ctx.scale(growth, growth);
@@ -402,8 +415,13 @@ function drawAlly(a, time) {
   ctx.restore();
 }
 
+function skillAura(id,x,y,radius,time,alpha=1) {
+  if(!WEAPONS.some(w=>w.id===id))return;
+  drawSkillEvolution(ctx,{id,tier:game.effectTier(id),x,y,radius,sx,sy,time,alpha,reducedMotion});
+}
 function drawFields(time) {
   for (const f of game.fields) {
+    skillAura(f.type,f.x,f.y,f.radius,time,.7);
     ctx.save(); ctx.translate(f.x * sx, f.y * sy);
     if (f.type === 'chorus') {
       for(let i=-1;i<=1;i++){
@@ -457,7 +475,7 @@ function drawNet(x, y, swing = 0, opacity = 1) {
 }
 
 function drawFlamethrower(x, y, firing = false, opacity = 1) {
-  ctx.save(); ctx.translate(x, y); ctx.rotate(-.55); ctx.scale(unit, unit); ctx.globalAlpha *= opacity;
+  ctx.save(); ctx.translate(x, y); ctx.rotate(-.55); ctx.scale(unit*game.radiusScale('flame'), unit*game.radiusScale('flame')); ctx.globalAlpha *= opacity;
   // Two pressurized fuel tanks, a flexible feed hose, stock, trigger, and vented nozzle.
   ctx.strokeStyle='#071e2566';ctx.lineWidth=12;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(59,227);ctx.bezierCurveTo(70,270,-55,264,-14,195);ctx.stroke();
   ctx.strokeStyle='#273b3d';ctx.lineWidth=8;ctx.stroke();ctx.strokeStyle='#7d8d78';ctx.lineWidth=2;ctx.stroke();
@@ -479,7 +497,7 @@ function drawFlamethrower(x, y, firing = false, opacity = 1) {
   if(!firing){ellipse(ctx,9,95,3,5,'#73caff');ctx.restore();return;}
   const flicker=Math.sin(visualTime*39)*9;
   const halo=ctx.createRadialGradient(0,-3,10,0,-3,170);halo.addColorStop(0,'#ffbf4648');halo.addColorStop(1,'#fb6d2200');ellipse(ctx,0,-3,166,153,halo);
-  const fire=ctx.createLinearGradient(0,102,0,-157);fire.addColorStop(0,'#b6e9ff');fire.addColorStop(.12,'#fff6bc');fire.addColorStop(.42,'#ffe377');fire.addColorStop(.72,'#ff933c');fire.addColorStop(1,'#f5522900');
+  const fire=ctx.createLinearGradient(0,102,0,-157);fire.addColorStop(0,'#b6e9ff');fire.addColorStop(.12,'#fff6bc');fire.addColorStop(.42,game.effectTier('flame')>=3?'#b8f7ff':'#ffe377');fire.addColorStop(.72,game.effectTier('flame')>=3?'#639dff':'#ff933c');fire.addColorStop(1,game.effectTier('flame')>=3?'#805dff00':'#f5522900');
   ctx.fillStyle=fire;ctx.beginPath();ctx.moveTo(-7,102);ctx.bezierCurveTo(-24,45,-127+flicker,15,-98,-102);ctx.quadraticCurveTo(-64,-57,-37,-147);ctx.quadraticCurveTo(-10,-82,10,-161+flicker);ctx.quadraticCurveTo(34,-84,70,-124);ctx.bezierCurveTo(152,-37,24,48,7,102);ctx.closePath();ctx.fill();
   ctx.fillStyle='#fff2b1dc';ctx.beginPath();ctx.moveTo(-4,101);ctx.bezierCurveTo(-8,46,-53,12,-27,-68);ctx.quadraticCurveTo(-3,-33,9,-90);ctx.bezierCurveTo(60,-9,5,62,4,101);ctx.fill();
   ctx.fillStyle='#d5f4ff';ctx.beginPath();ctx.moveTo(-4,101);ctx.quadraticCurveTo(-10,82,0,65);ctx.quadraticCurveTo(10,82,4,101);ctx.fill();
@@ -488,6 +506,8 @@ function drawFlamethrower(x, y, firing = false, opacity = 1) {
 
 function drawEffects() {
   for (const e of effects) {
+    const skill=e.source || ({lightning:'electric',tongue:'frog',sonic:'chorus',sealBurst:'talisman'}[e.type]) || e.type;
+    if(skill!=='flame' || e===effects.findLast(effect=>effect.source==='flame')) skillAura(skill,e.x??e.to?.x??500,e.y??e.to?.y??390,e.radius||(['thunderstorm','dragon'].includes(skill)?260:WEAPONS.find(w=>w.id===skill)?.radius)||60,visualTime,Math.min(1,e.life*3));
     const t = 1 - e.life / e.max; ctx.save(); ctx.globalAlpha = Math.min(1, e.life * 5);
     if(e.type==='sonic'){
       ctx.translate(e.x*sx,e.y*sy);ctx.strokeStyle='#c9ee9e';ctx.lineWidth=(1-t)*5+1;
@@ -504,11 +524,11 @@ function drawEffects() {
     } else if(e.type==='detonate'){
       const r=e.radius*(.25+t);const color=e.source==='meteor'?'#ffb87d':'#d3a1ff';const glow=ctx.createRadialGradient(e.x*sx,e.y*sy,0,e.x*sx,e.y*sy,Math.max(r*sx,r*sy));glow.addColorStop(0,color+'9c');glow.addColorStop(.4,color+'35');glow.addColorStop(1,color+'00');ellipse(ctx,e.x*sx,e.y*sy,r*sx,r*sy,glow);ctx.strokeStyle=color;ctx.lineWidth=(1-t)*7;ctx.stroke();ellipse(ctx,e.x*sx,e.y*sy,r*sx*.7,r*sy*.7);ctx.lineWidth=2;ctx.stroke();
     } else if(e.source==='dragon'){
-      drawDragonKing(ctx, { t, y: e.y*sy, width, unit, reducedMotion });
+      drawDragonKing(ctx, { t, y: e.y*sy, width, unit:unit*(1+game.effectTier('dragon')*.06), reducedMotion });
     } else if (e.type === 'thunderstorm') {
-      drawThunderstorm(ctx, { t, width, height, strikes:e.strikes, sx, sy, reducedMotion });
+      drawThunderstorm(ctx, { t, width, height, strikes:e.strikes, sx, sy, reducedMotion, tier:game.effectTier('thunderstorm') });
     } else if (e.type === 'lightning') {
-      ctx.lineWidth = 2.5 * unit; ctx.strokeStyle = '#ddfbff'; ctx.shadowColor = '#8eeaff'; ctx.shadowBlur = 12;
+      ctx.lineWidth = (2.5+game.effectTier('electric')*.5) * unit; ctx.strokeStyle = game.effectTier('electric')>=3?'#d3c5ff':'#ddfbff'; ctx.shadowColor = '#8eeaff'; ctx.shadowBlur = 12;
       const links = e.links.length ? e.links : [{ from: { x: e.x, y: e.y - 55 }, to: { x: e.x, y: e.y + 55 } }];
       for (const link of links) { ctx.beginPath(); ctx.moveTo(link.from.x * sx, link.from.y * sy); for (let i = 1; i < 6; i++) { const p = i / 6; ctx.lineTo((link.from.x + (link.to.x - link.from.x) * p + (Math.random() - .5) * 25) * sx, (link.from.y + (link.to.y - link.from.y) * p + (Math.random() - .5) * 25) * sy); } ctx.lineTo(link.to.x * sx, link.to.y * sy); ctx.stroke(); }
     } else if (e.type === 'tongue') {
@@ -556,7 +576,7 @@ function render(time) {
     } else if(selected==='thunderstorm') {
       ctx.fillRect(0,0,width,height);ctx.strokeRect(3,3,width-6,height-6);
     } else if(selected==='meteor') {
-      for(let i=0;i<5;i++) {const a=i/4*Math.PI*2,r=i===0?0:85;ellipse(ctx,(pointer.x+Math.cos(a)*r)*sx,(pointer.y+Math.sin(a)*r)*sy,135*sx,135*sy);ctx.stroke();}
+      for(let i=0;i<5;i++) {const a=i/4*Math.PI*2,r=i===0?0:85;ellipse(ctx,(pointer.x+Math.cos(a)*r)*sx,(pointer.y+Math.sin(a)*r)*sy,135*game.radiusScale('meteor')*sx,135*game.radiusScale('meteor')*sy);ctx.stroke();}
     } else {ellipse(ctx,pointer.x*sx,pointer.y*sy,w.radius*sx,w.radius*sy);ctx.fill();ctx.stroke();}
     ctx.setLineDash([]);
     ellipse(ctx, pointer.x * sx, pointer.y * sy, 2, 2, ready ? '#eef4cf' : '#e8af86'); ctx.restore();

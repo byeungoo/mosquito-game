@@ -89,11 +89,18 @@ export class PondGame {
   get waveProgress() { return (this.elapsed % WAVE_SECONDS) / WAVE_SECONDS; }
   isUnlocked(id) { return WEAPONS.some(w => w.id === id && this.level >= w.unlock); }
   get cooldownRate() { return 1 + (this.upgrades.tempo || 0) * .12; }
-  weaponRadius(id) { const w=WEAPONS.find(w=>w.id===id); return w.radius + (id==='net' ? (this.upgrades.netcraft || 0)*8 : 0); }
+  skillRank(id) { return Math.min(3,this.upgrades[`skill_${id}`] || 0); }
+  skillPower(id) { return 1+this.skillRank(id)*.2; }
+  radiusScale(id) { return ['loach','frog','thunderstorm'].includes(id)?1:1+this.skillRank(id)*.06; }
+  weaponRadius(id) { const w=WEAPONS.find(w=>w.id===id); return (w.radius + (id==='net' ? (this.upgrades.netcraft || 0)*8 : 0))*this.radiusScale(id); }
+  effectTier(id) {
+    const specialty={net:'netcraft',flame:'fuel',freeze:'icecraft',loach:'pack',frog:'pack'}[id];
+    return Math.min(5,Math.floor((this.level-1)/4)+this.skillRank(id)+(this.upgrades[specialty]||0)+(this.upgrades.power||0));
+  }
   chooseUpgrade(id) {
     if (!['playing','paused'].includes(this.status) || !this.upgradeOffer.includes(id)) return false;
     const spec=UPGRADES.find(p=>p.id===id);
-    if (!spec || (this.upgrades[id] || 0)>=spec.max) return false;
+    if (!spec || this.level<spec.minWave || (this.upgrades[id] || 0)>=spec.max) return false;
     this.upgrades[id]=(this.upgrades[id] || 0)+1;
     this.upgradeOffer=[]; this.emit('upgraded',{id,rank:this.upgrades[id]}); return true;
   }
@@ -113,7 +120,7 @@ export class PondGame {
     for (const e of targets) {
       const conductive = ['electric','thunderstorm'].includes(source) && this.fields.some(f=>f.type==='vortex' && f.remaining>0 && distance(e,f)<=f.radius);
       const base=amount+(source==='net'?(this.upgrades.netcraft || 0):0);
-      const hit=base*(1+(this.upgrades.power || 0)*.12)*(e.frozen>0?1.5+(this.upgrades.icecraft || 0)*.15:1)*(e.rank>=3&&stageOf(e)==='adult'?1+(this.upgrades.hunter || 0)*.25:1)*(conductive?1.25:1);
+      const hit=base*this.skillPower(source)*(1+(this.upgrades.power || 0)*.12)*(e.frozen>0?1.5+(this.upgrades.icecraft || 0)*.15:1)*(e.rank>=3&&stageOf(e)==='adult'?1+(this.upgrades.hunter || 0)*.25:1)*(conductive?1.25:1);
       if(conductive) combos.set('conductive',e);
       if(e.frozen>0) combos.set('frozen',e);
       e.hp -= hit; e.hit = .15;
@@ -140,15 +147,17 @@ export class PondGame {
     // Remove this batch before resolving chained seals so every enemy scores once.
     for (const e of dead) {
       if (e.sealed > 0) {
-        this.emit('sealBurst', { x: e.x, y: e.y, radius: 125 });
-        this.damage(this.enemies.filter(other => distance(other, e) <= 125), 8, 'talisman', e.x, e.y);
+        const radius=125*this.radiusScale('talisman');
+        this.emit('sealBurst', { x: e.x, y: e.y, radius });
+        this.damage(this.enemies.filter(other => distance(other, e) <= radius), 8, 'talisman', e.x, e.y);
       }
     }
     return dead.length;
   }
   use(id, x, y) {
     if (this.status !== 'playing') return { ok: false, reason: 'paused' };
-    const w = WEAPONS.find(w => w.id === id);
+    const definition = WEAPONS.find(w => w.id === id);
+    const w = definition && {...definition,radius:this.weaponRadius(id)};
     if (!w) return { ok: false, reason: 'unknown' };
     if (!this.isUnlocked(id)) return { ok: false, reason: 'locked', unlock: w.unlock };
     if (this.cooldowns[id] > 0) return { ok: false, reason: 'cooldown' };
@@ -178,7 +187,7 @@ export class PondGame {
         if (e.rank === 4 && stageOf(e) === 'adult') { e.frozen = Math.max(e.frozen, 2.5); continue; }
         const healthRatio = e.hp / e.maxHp;
         if (stageOf(e) === 'adult') { if (e.rank > 0) e.rank--; else e.age = 10; }
-        else e.age = Math.max(0, e.age - 9);
+        else e.age = Math.max(0, e.age - 9 - this.skillRank('rewind')*2);
         e.maxHp = stageOf(e) === 'adult' ? evolutionOf(e).hp : 1 + Math.floor(e.rank / 2);
         e.hp = e.maxHp * healthRatio; e.evolve = 0; e.breed = 0;
       }
@@ -194,17 +203,17 @@ export class PondGame {
     }
     if (id === 'vortex' || id === 'blackhole') {
       const point = pondPoint(x, y);
-      this.fields.push({ ...point, type: id, remaining: id === 'vortex' ? 5 : 3, radius: w.radius });
+      this.fields.push({ ...point, type: id, remaining: id === 'vortex' ? 5+this.skillRank('vortex') : 3, radius: w.radius });
       this.emit(id, point); return { ok: true };
     }
     if (id === 'freeze') {
-      for (const e of targets) e.frozen = e.rank === 4 ? 2.5 : 5+(this.upgrades.icecraft || 0);
+      for (const e of targets) e.frozen = e.rank === 4 ? 2.5 : 5+(this.upgrades.icecraft || 0)+this.skillRank('freeze')*.75;
       this.fields.push({ x, y, type: 'freeze', remaining: 1.3, radius: w.radius }); this.emit('freeze', { x, y, count: targets.length }); return { ok: true };
     }
     if (id === 'meteor') {
       for (let i = 0; i < 5; i++) {
         const a = i / 4 * Math.PI * 2, r = i === 0 ? 0 : 85;
-        this.fields.push({ x: x + Math.cos(a) * r, y: y + Math.sin(a) * r, type: 'meteor', remaining: .65 + i * .32, radius: 135 });
+        this.fields.push({ x: x + Math.cos(a) * r, y: y + Math.sin(a) * r, type: 'meteor', remaining: .65 + i * .32, radius: 135*this.radiusScale('meteor') });
       }
       this.emit('meteor', { x, y }); return { ok: true };
     }
@@ -227,7 +236,7 @@ export class PondGame {
   }
   sustainFlame(delta, x, y) {
     if (this.status !== 'playing') return { ok: false, reason: 'paused' };
-    const w = WEAPONS.find(w => w.id === 'flame');
+    const w = {...WEAPONS.find(w => w.id === 'flame'),radius:this.weaponRadius('flame')};
     if (!this.isUnlocked('flame')) return { ok: false, reason: 'locked', unlock: w.unlock };
     if (this.overheated) return { ok: false, reason: 'overheated' };
     const heatRate=w.heatPerSecond*(1-(this.upgrades.fuel || 0)*.15);
@@ -281,7 +290,7 @@ export class PondGame {
     this.fields = this.fields.filter(f => f.remaining > 0);
     for (const f of expired) {
       if (f.type === 'blackhole' || f.type === 'meteor') {
-        const radius = f.type === 'blackhole' ? 190 : f.radius, damage = f.type === 'blackhole' ? 32 : 20;
+        const radius = f.type === 'blackhole' ? 190*this.radiusScale('blackhole') : f.radius, damage = f.type === 'blackhole' ? 32 : 20;
         const count = this.damage(this.enemies.filter(e => distance(e, f) < radius), damage, f.type, f.x, f.y);
         this.emit('detonate', { x: f.x, y: f.y, radius, source: f.type, count });
       }

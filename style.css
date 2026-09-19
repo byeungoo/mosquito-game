@@ -25,3 +25,31 @@
 .quick-arsenal{display:none}.quick-weapons{position:relative;display:flex;gap:7px;overflow-x:auto;overscroll-behavior-x:contain;touch-action:pan-x;scrollbar-width:thin;padding:4px 1px 7px}.quick-weapon{flex:0 0 68px;min-height:66px!important}.quick-weapon[hidden]{display:none}.quick-heading{display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:10px}.quick-heading>span{color:#6a795d;font-size:9px}.quick-arsenal>small{font-size:8px;color:#7a876d}.quick-weapon .keycap{display:none}.heat-hud{position:absolute;right:24px;bottom:88px;width:150px;pointer-events:none;color:#ffcc91;font-size:9px}.heat-hud>div{height:4px;background:#ffc47a25;border-radius:5px;overflow:hidden;margin-top:6px}.heat-hud i{display:block;height:100%;background:#ffb66b;transition:width .1s}.heat-hud.overheated{color:#ff8e87}.heat-hud.overheated i{background:#ff736c}@media(max-width:760px){.quick-arsenal{display:block;width:100%;min-width:0;padding:2px 0 6px}.heat-hud{right:17px;bottom:76px;width:120px;font-size:8px}.arsenal-heading{display:flex;margin-top:8px}.arsenal-heading h2{font-size:13px}.arsenal-heading .eyebrow{font-size:7px}}
 #upgrade-dialog{width:min(790px,calc(100vw - 28px));padding:30px}#upgrade-dialog h2{margin:10px 0;font-size:25px}#upgrade-wave{margin:0 0 20px}#upgrade-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.upgrade-option{display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:10px;padding:21px 17px;background:#e9eedf;border:1px solid #c6d2b8;border-radius:14px;transition:transform .15s,background .15s}.upgrade-option:hover{transform:translateY(-3px);background:#dceacb;border-color:#718950}.upgrade-option svg{width:42px;height:42px;color:#436748;margin:8px 0}.upgrade-category{font-size:10px;letter-spacing:1px;color:#77846b}.upgrade-option strong{font-size:17px}.upgrade-rank{font-size:10px;color:#5e7f42;font-weight:800}.upgrade-description{font-size:12px;line-height:1.8;color:#69785c;flex:1;word-break:keep-all}.upgrade-choose{font-size:11px;font-weight:800;margin-top:15px}.upgrade-footer{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-top:18px;font-size:10px;color:#7c8972}.upgrade-footer .text-btn{padding:8px;white-space:nowrap}.run-build{padding:15px 2px 0}.run-build>div:first-child{display:flex;align-items:center;justify-content:space-between}.run-build p{font-size:10px;color:#77856b;line-height:1.6}.run-build button{border:1px solid #bac98d;border-radius:20px;background:#e4eeb9;padding:7px 10px;font-size:10px}.upgrade-chip{display:inline-block;border:1px solid #d0dac0;border-radius:5px;background:#e9eedf;padding:5px 7px;font-size:9px;color:#52713e;margin:7px 5px 0 0}.streak-hud{position:absolute;left:23px;bottom:57px;pointer-events:none;color:#e4efae;min-width:90px}.streak-hud b{display:block;font-size:19px;font-variant-numeric:tabular-nums}.streak-hud span{font-size:8px;opacity:.65}.streak-hud>div{height:2px;margin-top:5px;background:#efffa62b}.streak-hud i{display:block;height:100%;background:#e4efae;box-shadow:0 0 7px #dfff81}
 @media(max-width:760px){.weapon-grid{grid-template-columns:repeat(5,minmax(0,1fr));gap:5px}.weapon-name{font-size:9px!important}.weapon-btn{min-height:70px}.streak-hud{left:17px;bottom:47px;min-width:66px}.streak-hud b{font-size:15px}.streak-hud span{font-size:6px}.boss-hud{left:32%;right:5%}#upgrade-dialog{padding:23px 19px}#upgrade-dialog h2{font-size:21px}#upgrade-options{grid-template-columns:1fr;gap:9px}.upgrade-option{display:grid;grid-template-columns:40px 1fr auto;padding:13px;gap:5px 10px;align-items:center}.upgrade-option svg{grid-column:1;grid-row:1/4;width:32px;height:32px;margin:0}.upgrade-category{grid-column:2;grid-row:1;font-size:9px}.upgrade-option strong{grid-column:2;grid-row:2;font-size:15px}.upgrade-rank{grid-column:3;grid-row:2;font-size:9px}.upgrade-description{grid-column:2/4;grid-row:3;font-size:11px;line-height:1.6}.upgrade-choose{display:none}.upgrade-footer{font-size:9px;align-items:flex-start}.run-build{padding-top:12px}}
+/* Mobile: keep the pond and all fifteen skills together in the first viewport. */
+@media(max-width:760px){
+  .topbar{height:52px}
+  .intro-line{display:none}
+  .game-layout{gap:8px;padding-top:8px}
+  .arena{height:max(240px,calc(100svh - 312px - env(safe-area-inset-bottom)));min-height:0;max-height:none}
+  .quick-arsenal{padding:0 0 env(safe-area-inset-bottom)}
+  .quick-heading{min-height:16px}
+  .quick-weapons{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;overflow:visible;touch-action:manipulation;padding:4px 0}
+  .quick-weapon{min-width:0;height:64px;min-height:64px!important;padding:5px 2px 13px;gap:3px;border-radius:9px}
+  .quick-weapon svg{width:20px;height:20px;flex-shrink:0}
+  .quick-weapon .weapon-name{font-size:8px!important;line-height:1.2}
+  .quick-weapon .cooldown-label{top:2px;right:3px}
+  .arsenal>.weapon-grid,.arsenal>.arsenal-heading{display:none}
+  .weapon-detail{margin-top:0}
+  .arena-top{top:10px}
+  .hud{top:48px}
+  .wave-meter{top:103px}
+  .toast{top:128px}
+  .overlay{padding:10px}
+  .start-card{padding:8px;max-height:100%;overflow-y:auto}
+}
+@media(max-width:760px) and (max-height:650px){
+  .start-card .mini-badge,.start-card>p:not(.daily-description){display:none}
+  .start-card h2{font-size:22px;margin:4px 0 10px}
+  .start-card .primary-btn{padding:12px 14px}
+}
+.skill-rank{position:absolute;top:3px;left:4px;z-index:3;font-size:8px;font-weight:900;color:#5b8650}.weapon-btn.selected .skill-rank{color:#e7ffb4}.weapon-btn[data-mastery='1']{border-color:#8eae79}.weapon-btn[data-mastery='2']{border-color:#69b6c0}.weapon-btn[data-mastery='3']{border-color:#b59ad7;box-shadow:inset 0 0 10px #bca0e92b}.weapon-btn[data-mastery='1'] .keycap,.weapon-btn[data-mastery='2'] .keycap,.weapon-btn[data-mastery='3'] .keycap{display:none}.upgrade-description b{color:#627da0}

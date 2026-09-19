@@ -2,5 +2,7 @@ node_modules/
 .DS_Store
 Thumbs.db
 artifacts/
+output/playwright/
+.playwright-cli/
 _site/
 *.log
