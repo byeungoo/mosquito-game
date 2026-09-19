@@ -55,9 +55,9 @@ test('electric chains have a hard limit of sixteen targets', () => {
   const g = setup(2); for (let i=0;i<25;i++) enemy(g,500+i,390);
   assert.equal(g.use('electric',500,390).count,16); assert.equal(g.enemies.length,9);
 });
-test('flame affects adults only, overheats, and cools back into service', () => {
+test('flame affects adults and larvae, overheats, and cools back into service', () => {
   const g = setup(3); const adult = enemy(g, 500, 390, 20); const larva = enemy(g, 500, 390, 5);
-  g.use('flame',500,390); assert.equal(adult.hp,1); assert.equal(larva.hp,1);
+  g.use('flame',500,390); assert.equal(adult.hp,1); assert.equal(larva.hp,0);
   for(let i=0;i<16;i++){advance(g,.2);g.use('flame',500,390);}
   assert.equal(g.overheated,true);advance(g,.2);assert.equal(g.use('flame',500,390).reason,'overheated');
   advance(g,4);assert.equal(g.overheated,false);assert.equal(g.use('flame',500,390).ok,true);

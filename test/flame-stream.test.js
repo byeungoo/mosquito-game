@@ -19,7 +19,8 @@ test('held flame hits newly entering adults and stops outside range, when locked
   const {g,target}=setup(); target.x=700;
   const larva=g.spawn(10,0);Object.assign(larva,{x:500,y:390});
   g.sustainFlame(.1,500,390);assert.equal(target.hp,65);
-  target.x=500;g.sustainFlame(.1,500,390);assert.equal(target.hp,63.4);assert.equal(larva.hp,1);
+  assert.ok(!g.enemies.includes(larva));assert.equal(g.kills,1);
+  target.x=500;g.sustainFlame(.1,500,390);assert.equal(target.hp,63.4);assert.equal(g.kills,1);
   g.status='paused';assert.equal(g.sustainFlame(.1,500,390).reason,'paused');assert.equal(target.hp,63.4);
   g.status='playing';g.level=2;assert.equal(g.sustainFlame(.1,500,390).reason,'locked');assert.equal(target.hp,63.4);
 });

@@ -24,7 +24,7 @@ export const WEAPONS = [
   { id: 'net', key: '1', unlock: 1, name: '대왕 뜰채', icon: 'net', tag: '기본 공격 · 물속 + 공중', cooldown: .48, radius: 56, damage: 1, description: '물속은 한 번에, 일반 성충은 두 번! 드래그로 연속 공격해요.', hint: '클릭 / 드래그 · 기본 피해 1, 성충도 공격 가능' },
   { id: 'loach', key: '2', unlock: 1, name: '미꾸라지', icon: 'fish', tag: '자동 사냥 · 물속', cooldown: 17, radius: 35, damage: 1, description: '물속을 자동 사냥해요. 최대 10마리. 진화 유충은 여러 번 공격해야 해요.', hint: '클릭 · 물속 자동 방어 (최대 10마리)' },
   { id: 'electric', key: '3', unlock: 2, name: '전기 방전봉', icon: 'bolt', tag: '광역 연쇄 · 피해 3', cooldown: 5, radius: 165, chainRadius: 145, damage: 3, description: '최대 16마리에게 연쇄 번개! 소용돌이 안의 적에게 피해가 25% 증가해요.', hint: '클릭 · 연쇄 번개 / 소용돌이 안에서 피해 +25%' },
-  { id: 'flame', key: '4', unlock: 3, name: '화염 방사기', icon: 'flamethrower', tag: '지속 화염 · 초당 피해 16', cooldown: .12, radius: 155, damage: 1, dps: 16, heatPerSecond: 25, description: '연못을 누르고 있으면 범위 안 성충에게 초당 피해 16! 약 4초 연속 분사하며, 드래그로 조준할 수 있어요.', hint: '연못을 누른 채 유지 / 드래그 · 초당 피해 16 · 과열 시 잠시 냉각' },
+  { id: 'flame', key: '4', unlock: 3, name: '화염 방사기', icon: 'flamethrower', tag: '지속 화염 · 물속 + 공중', cooldown: .12, radius: 155, damage: 1, dps: 16, heatPerSecond: 25, description: '연못을 누르고 있으면 범위 안 알·유충·번데기·성충 모두에게 초당 피해 16! 약 4초 연속 분사하며, 드래그로 조준할 수 있어요.', hint: '연못을 누른 채 유지 / 드래그 · 유충도 공격 · 초당 피해 16 · 과열 시 잠시 냉각' },
   { id: 'vortex', key: '5', unlock: 4, name: '소용돌이', icon: 'vortex', tag: '제어 · 감전 조합', cooldown: 13, radius: 205, description: '5초 동안 적을 끌어모아요. 범위 안의 적에게 전기 방전봉·천뢰난무 피해 +25%!', hint: '클릭 · 소용돌이 → 전기 공격으로 추가 피해' },
   { id: 'frog', key: '6', unlock: 5, name: '개구리 특공대', icon: 'frog', tag: '고속 자동 사냥 · 공중 피해 3', cooldown: 20, radius: 35, damage: 3, description: '1.3초마다 빠르게 혀를 뻗어 공격해요. 최대 10마리로 공중을 지켜주세요.', hint: '클릭 · 1.3초마다 공격하는 지원군 (최대 10마리)' },
   { id: 'freeze', key: '7', unlock: 6, name: '절대 영도', icon: 'snow', tag: '빙결 · 후속 피해 증가', cooldown: 15, radius: 180, description: '성장과 이동을 5초간 정지. 얼어붙은 적은 피해를 1.5배 받아요.', hint: '클릭 · 얼린 뒤 강한 공격으로 산산조각!' },
@@ -214,7 +214,7 @@ export class PondGame {
       this.emit('talisman', { x, y, radius: w.radius, count: targets.length }); return { ok: true };
     }
     if (id === 'flame') {
-      targets = targets.filter(e => stageOf(e) === 'adult'); this.heat = Math.min(100, this.heat + 6); this.flameUntil = this.elapsed + .2;
+      this.heat = Math.min(100, this.heat + 6); this.flameUntil = this.elapsed + .2;
       if (this.heat >= 100) this.overheated = true;
     }
     if (id === 'vortex' || id === 'blackhole') {
@@ -261,7 +261,7 @@ export class PondGame {
     this.heat = Math.min(100, this.heat + dt * heatRate);
     this.flameUntil = this.elapsed + .2;
     if (this.heat >= 100) this.overheated = true;
-    const targets = this.enemies.filter(e => stageOf(e) === 'adult' && distance(e, { x, y }) <= w.radius);
+    const targets = this.enemies.filter(e => distance(e, { x, y }) <= w.radius);
     const count = this.damage(targets, w.dps * dt, 'flame', x, y);
     // Damage is continuous; expensive particles and sound use a slower visual cadence.
     if (this.cooldowns.flame <= 0) {
